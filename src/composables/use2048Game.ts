@@ -1,8 +1,8 @@
 import { computed, ref, shallowRef } from 'vue'
 import {
   createGame, createSession, dismissSessionPopup, moveSessionWithResult, undoSession, canUndoSession, undoRemaining,
-  hasReachedTarget, highestPower, DEFAULT_SETTINGS, DEFAULT_SPECIAL, movesUntilSpecial, validateSettings, observeSession, sessionEndReason, remainingTimeMs, remainingMoves,
-  type Direction, type GameSettings, type SettingsDraft, type PlaySession,
+  hasReachedTarget, highestPower, DEFAULT_SETTINGS, DEFAULT_SPECIAL, DEFAULT_SPECIAL_TIME, canUseSpecialTime, editSessionTile, movesUntilSpecial, validateSettings, observeSession, sessionEndReason, remainingTimeMs, remainingMoves,
+  type TimeValue, type GameState, type Direction, type GameSettings, type SettingsDraft, type PlaySession,
 } from '../core/index.ts'
 import { createGameStorage, type StoragePort, type SaveResult } from '../services/gameStorage.ts'
 import type { MovePresentation } from '../presentation/tiles.ts'
@@ -17,6 +17,10 @@ export function use2048Game(seedSource: SeedSource = browserSeed, storage?: Stor
   const current = shallowRef<PlaySession | null>(null), error = ref('')
   const presentation = shallowRef<MovePresentation | null>(null)
   let presentationId = 0
+  const timeEditing = ref(false), selectedCell = ref<number | null>(null), selectedValue = ref<TimeValue | null>(null), animationActive = ref(false)
+  let editingGame: GameState | null = null
+  function cancelTimeEditing() { timeEditing.value = false; selectedCell.value = null; selectedValue.value = null; editingGame = null }
+  function setAnimationActive(active: boolean) { animationActive.value = active }
   const repository = storage ? createGameStorage(storage) : null
   const saveResult = shallowRef<SaveResult | null>(null), restoreMessage = ref(''), bestMessage = ref(repository?.bestMessage() ?? '')
   const bestRevision = ref(0)
@@ -29,7 +33,10 @@ export function use2048Game(seedSource: SeedSource = browserSeed, storage?: Stor
     const { size, target, initialTiles, spawn4Percent, undoLimit } = draft
     return validateSettings({ ...DEFAULT_SETTINGS, size, target, initialTiles, spawn4Percent, undoLimit, mode,
       ...(draft.specialEnabled !== undefined || draft.specialInterval !== undefined || draft.specialValue !== undefined ? { special: { enabled: draft.specialEnabled ?? false,
-        interval: draft.specialInterval ?? DEFAULT_SPECIAL.interval, value: draft.specialValue ?? DEFAULT_SPECIAL.value, replacement: 'replace' } } : {}) })
+        interval: draft.specialInterval ?? DEFAULT_SPECIAL.interval, value: draft.specialValue ?? DEFAULT_SPECIAL.value, replacement: 'replace' } } : {}),
+      ...(draft.timeEnabled !== undefined || draft.timeInterval !== undefined || draft.timeMaxCharges !== undefined || draft.timeValues !== undefined
+        ? { specialTime: { enabled: draft.timeEnabled ?? false, interval: draft.timeInterval ?? DEFAULT_SPECIAL_TIME.interval,
+          maxCharges: draft.timeMaxCharges ?? DEFAULT_SPECIAL_TIME.maxCharges, values: draft.timeValues ?? DEFAULT_SPECIAL_TIME.values } } : {}) })
   })
   const state = computed(() => current.value?.game ?? null)
   const popup = computed(() => current.value?.popup ?? null)
@@ -55,12 +62,51 @@ export function use2048Game(seedSource: SeedSource = browserSeed, storage?: Stor
   const specialArrival = computed(() => presentation.value?.result.specialSpawned ? state.value?.settings.special?.value ?? null : null)
   const goalReached = computed(() => state.value ? hasReachedTarget(state.value) : false)
   const maxTile = computed(() => { const power = state.value ? highestPower(state.value.position.board) : 0; return power ? 1n << BigInt(power) : 0n })
-  const inputBlocked = computed(() => !state.value || popup.value !== null || gameOver.value)
-  const canUndo = computed(() => current.value ? canUndoSession(current.value) : false)
+  const inputBlocked = computed(() => timeEditing.value || !state.value || popup.value !== null || gameOver.value)
+  const canUndo = computed(() => !timeEditing.value && current.value ? canUndoSession(current.value) : false)
   const remainingUndo = computed(() => current.value ? undoRemaining(current.value) : DEFAULT_SETTINGS.undoLimit)
   const undoUsed = computed(() => current.value?.undoUsed ?? 0)
   const historyLength = computed(() => current.value?.history.length ?? 0)
   const bestScore = computed(() => { void bestRevision.value; return state.value && repository ? repository.bestFor(state.value.settings) : 0n })
+
+  const timeSettings = computed(() => state.value?.settings.specialTime)
+  const timeCharges = computed(() => current.value?.specialTime?.charges ?? 0)
+  const timeRemaining = computed(() => timeSettings.value?.enabled ? (current.value!.specialTime!.processedEvents + 1) * timeSettings.value.interval - moves.value : null)
+  const timeLabelSettings = computed(() => timeSettings.value?.enabled
+    ? `スペシャルタイム：${timeSettings.value.interval}手ごと・最大${timeSettings.value.maxCharges}回` : 'スペシャルタイム：OFF')
+  const canStartTime = computed(() => !timeEditing.value && !animationActive.value && current.value !== null && canUseSpecialTime(current.value))
+  const currentCellValue = computed(() => {
+    const tile = selectedCell.value === null ? null : state.value?.position.board[selectedCell.value]
+    return tile ? 1n << BigInt(tile.power) : 0n
+  })
+  const canConfirmTime = computed(() => timeEditing.value && !animationActive.value && current.value !== null && editingGame === state.value
+    && selectedCell.value !== null && selectedValue.value !== null && BigInt(selectedValue.value) !== currentCellValue.value
+    && canUseSpecialTime(current.value))
+  function beginTimeEditing() {
+    refreshTime()
+    if (!canStartTime.value || !current.value) return false
+    current.value = dismissSessionPopup(current.value, now())
+    if (!canUseSpecialTime(current.value)) { persist(); return false }
+    editingGame = current.value.game; timeEditing.value = true; selectedCell.value = null; selectedValue.value = null
+    presentation.value = null; persist(); return true
+  }
+  function selectTimeCell(index: number) {
+    if (!timeEditing.value || !Number.isInteger(index) || index < 0 || index >= (state.value?.position.board.length ?? 0)) return
+    selectedCell.value = index
+  }
+  function selectTimeValue(value: TimeValue) {
+    if (timeEditing.value && timeSettings.value?.values.includes(value)) selectedValue.value = value
+  }
+  function confirmTimeEdit() {
+    refreshTime()
+    if (!canConfirmTime.value || !current.value || selectedCell.value === null || selectedValue.value === null) return false
+    try {
+      const before = current.value, next = editSessionTile(before, selectedCell.value, selectedValue.value, now())
+      current.value = next
+      if (next.game === before.game) { if (!canUseSpecialTime(next)) cancelTimeEditing(); persist(); return false }
+      cancelTimeEditing(); presentation.value = null; error.value = ''; updateBest(); persist(); return true
+    } catch { error.value = '数字を変更できませんでした。盤面と変更権は変更していません。'; return false }
+  }
 
   function persist() { if (repository && current.value) saveResult.value = repository.saveGame(current.value) }
   function updateBest() {
@@ -73,6 +119,7 @@ export function use2048Game(seedSource: SeedSource = browserSeed, storage?: Stor
     try {
       const next = createSession(createGame(seedSource(), settings))
       current.value = next
+      cancelTimeEditing(); animationActive.value = false
       presentation.value = null
       error.value = ''; restoreMessage.value = ''
       persist()
@@ -94,6 +141,7 @@ export function use2048Game(seedSource: SeedSource = browserSeed, storage?: Stor
     persist()
   }
   function dispatchMove(direction: Direction) {
+    if (timeEditing.value) { refreshTime(); return false }
     if (!current.value) return false
     try {
       const before = current.value, outcome = moveSessionWithResult(before, direction, now()), next = outcome.session
@@ -110,6 +158,7 @@ export function use2048Game(seedSource: SeedSource = browserSeed, storage?: Stor
     }
   }
   function undo() {
+    if (timeEditing.value) { refreshTime(); return false }
     if (!current.value) return false
     try {
       const before = current.value, next = undoSession(before, undefined, now())
@@ -127,6 +176,7 @@ export function use2048Game(seedSource: SeedSource = browserSeed, storage?: Stor
       const before = current.value, next = observeSession(before, now())
       if (next !== before) {
         current.value = next
+        if (sessionEndReason(next) === 'time-expired') cancelTimeEditing()
         if (sessionEndReason(before) !== sessionEndReason(next) || before.popup !== next.popup) persist()
       }
     } catch { error.value = '時計を確認できませんでした。操作を再度お試しください。' }
@@ -138,6 +188,7 @@ export function use2048Game(seedSource: SeedSource = browserSeed, storage?: Stor
     const applied = current.value.game.settings
     draftSettings.value = { size: applied.size, target: applied.target, initialTiles: applied.initialTiles,
       spawn4Percent: applied.spawn4Percent, undoLimit: applied.undoLimit,
+      ...(applied.specialTime ? { timeEnabled: applied.specialTime.enabled, timeInterval: applied.specialTime.interval, timeMaxCharges: applied.specialTime.maxCharges, timeValues: [...applied.specialTime.values] } : {}),
       ...(applied.special ? { specialEnabled: applied.special.enabled, specialInterval: applied.special.interval, specialValue: applied.special.value } : {}),
       ...(applied.mode.kind === 'timed' ? { modeKind: 'timed', timeSeconds: applied.mode.seconds }
         : applied.mode.kind === 'moves' ? { modeKind: 'moves', moveLimit: applied.mode.limit } : {}) }
@@ -157,6 +208,8 @@ export function use2048Game(seedSource: SeedSource = browserSeed, storage?: Stor
       : '保存データを読み込めませんでした。新しいゲームの開始をお試しください。'
   }
   return {
+    timeEditing, selectedCell, selectedValue, timeCharges, timeRemaining, timeSettings, timeLabelSettings, canStartTime, canConfirmTime, currentCellValue,
+    beginTimeEditing, cancelTimeEditing, selectTimeCell, selectTimeValue, confirmTimeEdit, setAnimationActive,
     state, presentation, specialRemaining, specialLabel, specialArrival, score, moves, gameOver, endReason, remainingMs, movesLeft, clockStarted, clockRunning, timeLabel, modeLabel, refreshTime, checkpoint, goalReached, maxTile, draftSettings, settingsValidation, applySettings,
     popup, inputBlocked, canUndo, remainingUndo, undoUsed, historyLength, undo, bestScore,
     saveResult, restoreMessage, bestMessage, error: computed(() => error.value), newGame, dispatchMove, dismissPopup,

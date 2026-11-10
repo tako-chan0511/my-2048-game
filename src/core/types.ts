@@ -12,12 +12,30 @@ export interface SpecialSettings {
   readonly replacement: 'replace'
 }
 export const DEFAULT_SPECIAL: SpecialSettings = Object.freeze({ enabled: false, interval: 5, value: 32, replacement: 'replace' })
+export const TIME_VALUES = Object.freeze([2, 4, 8, 16, 32, 64, 128, 256] as const)
+export type TimeValue = typeof TIME_VALUES[number]
+export interface SpecialTimeSettings {
+  readonly enabled: boolean
+  readonly interval: number
+  readonly maxCharges: number
+  readonly values: readonly TimeValue[]
+}
+export const DEFAULT_SPECIAL_TIME: SpecialTimeSettings = Object.freeze({ enabled: false, interval: 10, maxCharges: 3, values: TIME_VALUES })
+// Edit effects are outside Position: an edit clears all older rollback history.
+export interface EditEffects {
+  readonly edits: number
+  readonly lastEditMove: number
+  readonly emptyEdits: number
+  readonly massDelta: bigint
+  readonly potentialDelta: bigint
+}
 export interface GameSettings {
   readonly size: BoardSize
   readonly target: Target
   readonly initialTiles: number
   readonly spawn4Percent: number
   readonly undoLimit: UndoLimit
+  readonly specialTime?: SpecialTimeSettings
   readonly special?: SpecialSettings
   readonly mode: GameMode
 }
@@ -34,6 +52,7 @@ export interface Position {
 // Position is the rollback unit. Session metadata, budgets and future clocks
 // live outside it and are never rewound by Undo.
 export interface GameState {
+  readonly editEffects?: EditEffects
   readonly rulesVersion: '2048-v1'
   readonly initialSeed: number
   readonly settings: GameSettings
@@ -87,6 +106,10 @@ export interface SettingsDraft {
   initialTiles: number | string
   spawn4Percent: number | string
   undoLimit: number | string
+  timeEnabled?: boolean
+  timeInterval?: number | string
+  timeMaxCharges?: number | string
+  timeValues?: readonly number[]
   specialEnabled?: boolean
   specialInterval?: number | string
   specialValue?: number | string
@@ -94,7 +117,7 @@ export interface SettingsDraft {
   timeSeconds?: number | string
   moveLimit?: number | string
 }
-export interface SettingsIssue { readonly field: keyof GameSettings | 'settings' | 'timeSeconds' | 'moveLimit' | 'specialEnabled' | 'specialInterval' | 'specialValue'; readonly message: string }
+export interface SettingsIssue { readonly field: keyof GameSettings | 'settings' | 'timeSeconds' | 'moveLimit' | 'timeEnabled' | 'timeInterval' | 'timeMaxCharges' | 'timeValues' | 'specialEnabled' | 'specialInterval' | 'specialValue'; readonly message: string }
 export type SettingsValidation =
   | { readonly valid: true; readonly settings: GameSettings; readonly warnings: readonly string[] }
   | { readonly valid: false; readonly issues: readonly SettingsIssue[] }

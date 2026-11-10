@@ -1,6 +1,6 @@
 import type { GameSettings, SettingsValidation } from './types.ts'
 import { maximumSpawnValue } from './special.ts'
-import { DEFAULT_SPECIAL } from './types.ts'
+import { DEFAULT_SPECIAL, DEFAULT_SPECIAL_TIME } from './types.ts'
 import { assertSettings, settingsIssues } from './validation.ts'
 
 // Conservative bound: with M cells and largest possible spawn B, a tile can
@@ -15,10 +15,13 @@ export function theoreticalMaxTile(settings: GameSettings): bigint {
 // Missing/default OFF settings keep the legacy shape; retain configured OFF values for restoration.
 export function canonicalSettings(raw: GameSettings): GameSettings {
   assertSettings(raw)
-  const { special, ...rest } = raw
+  const { special, specialTime, ...rest } = raw
   return Object.freeze({ ...rest, mode: Object.freeze({ ...rest.mode }),
     ...(special && (special.enabled || special.interval !== DEFAULT_SPECIAL.interval || special.value !== DEFAULT_SPECIAL.value)
-      ? { special: Object.freeze({ ...special }) } : {}) })
+      ? { special: Object.freeze({ ...special }) } : {}),
+    ...(specialTime && (specialTime.enabled || specialTime.interval !== DEFAULT_SPECIAL_TIME.interval || specialTime.maxCharges !== DEFAULT_SPECIAL_TIME.maxCharges
+      || specialTime.values.length !== DEFAULT_SPECIAL_TIME.values.length)
+      ? { specialTime: Object.freeze({ ...specialTime, values: Object.freeze([...specialTime.values].sort((a, b) => a - b)) }) } : {}) })
 }
 
 export function validateSettings(raw: unknown): SettingsValidation {

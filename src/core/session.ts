@@ -10,7 +10,14 @@ export interface SessionClock {
   readonly deadlineMs: number | null
   readonly lastObservedAtMs: number | null
 }
+export interface SpecialTimeState {
+  readonly charges: number
+  readonly processedEvents: number
+  readonly granted: number
+  readonly used: number
+}
 export interface PlaySession {
+  readonly specialTime?: SpecialTimeState
   readonly game: GameState
   readonly history: readonly Position[]
   readonly undoUsed: number
@@ -71,6 +78,7 @@ export function observeSession(session: PlaySession, nowMs?: number): PlaySessio
 }
 export function createSession(game: GameState): PlaySession {
   return resolveSessionResult(Object.freeze({ game, history: Object.freeze([]), undoUsed: 0, goalNotified: false,
+    ...(game.settings.specialTime?.enabled ? { specialTime: Object.freeze({ charges: 0, processedEvents: 0, granted: 0, used: 0 }) } : {}),
     overNotifiedRevision: null, overNotifiedReason: null, popup: null, clock: EMPTY_CLOCK }))
 }
 // Preserve the original API; consumers that render motion can observe the exact
@@ -94,7 +102,16 @@ export function moveSessionWithResult(session: PlaySession, direction: Direction
   let history: readonly Position[] = remaining === 0 ? [] : [...session.history, session.game.position]
   if (remaining !== 'unlimited' && remaining > 0) history = history.slice(-remaining)
   const goal = result.justReachedTarget && !session.goalNotified
-  const next: PlaySession = Object.freeze({ ...session, game: result.state, history: Object.freeze(history), clock,
+  let specialTime = session.specialTime
+  const timeSettings = session.game.settings.specialTime
+  if (timeSettings?.enabled && specialTime) {
+    const event = Math.floor(result.state.position.moveCount / timeSettings.interval)
+    if (event > specialTime.processedEvents) {
+      const gain = specialTime.charges < timeSettings.maxCharges ? 1 : 0
+      specialTime = Object.freeze({ ...specialTime, processedEvents: event, charges: specialTime.charges + gain, granted: specialTime.granted + gain })
+    }
+  }
+  const next: PlaySession = Object.freeze({ ...session, ...(specialTime ? { specialTime } : {}), game: result.state, history: Object.freeze(history), clock,
     goalNotified: session.goalNotified || goal, popup: goal ? 'goal' : null })
   return { session: resolveSessionResult(next, nowMs), move: result }
 }

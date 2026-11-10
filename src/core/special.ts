@@ -7,5 +7,6 @@ export function movesUntilSpecial(settings: GameSettings, moveCount: number): nu
   return settings.special?.enabled ? settings.special.interval - moveCount % settings.special.interval : null
 }
 export function maximumSpawnValue(settings: GameSettings): number {
-  return settings.special?.enabled ? settings.special.value : settings.spawn4Percent === 0 ? 2 : 4
+  return Math.max(settings.special?.enabled ? settings.special.value : settings.spawn4Percent === 0 ? 2 : 4,
+    settings.specialTime?.enabled ? Math.max(...settings.specialTime.values) : 0)
 }

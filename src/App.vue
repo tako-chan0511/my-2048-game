@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, nextTick, ref, watch } from 'vue'
+import SpecialTimePanel from './components/SpecialTimePanel.vue'
 import GameBoard from './components/GameBoard.vue'
 import GameSettingsPanel from './components/GameSettingsPanel.vue'
 import GameResultDialog from './components/GameResultDialog.vue'
@@ -11,6 +12,7 @@ import { DEFAULT_SETTINGS, type Direction } from './core/index.ts'
 
 const game = use2048Game(undefined, browserStorage)
 const { state, score, moves, maxTile, gameOver, goalReached, error, popup, inputBlocked, dismissPopup, draftSettings, settingsValidation, canUndo, remainingUndo, undoUsed, bestScore, saveResult, restoreMessage, bestMessage } = game
+const { timeEditing, selectedCell, selectedValue, timeCharges, timeRemaining, timeSettings, timeLabelSettings, canStartTime, canConfirmTime, currentCellValue } = game
 const { specialRemaining, specialLabel, specialArrival } = game
 const { endReason, remainingMs, movesLeft, clockStarted, clockRunning, timeLabel, modeLabel } = game
 useGameTicker({ isRunning: () => clockRunning.value, refresh: game.refreshTime, checkpoint: game.checkpoint })
@@ -31,6 +33,14 @@ function focusBoard() {
     surface.value.scrollIntoView?.({ block: 'nearest' })
   }
 }
+async function startSpecialTime() {
+  controls.cancelGesture()
+  if (game.beginTimeEditing()) { await nextTick(); surface.value?.querySelector<HTMLButtonElement>('.cell-select')?.focus({ preventScroll: true }) }
+}
+async function finishSpecialTime() {
+  if (game.confirmTimeEdit()) { await nextTick(); focusBoard() }
+}
+async function cancelSpecialTime() { game.cancelTimeEditing(); await nextTick(); focusBoard() }
 async function startNewGame() {
   controls.cancelGesture()
   if (game.newGame()) { await nextTick(); focusBoard() }
@@ -63,7 +73,7 @@ watch(popup, async (next, previous) => {
           <span class="settings-badge">{{ state?.settings.size ?? DEFAULT_SETTINGS.size }} × {{ state?.settings.size ?? DEFAULT_SETTINGS.size }} · 目標 {{ state?.settings.target ?? DEFAULT_SETTINGS.target }}</span>
           <button class="primary new-game" type="button" @click="!popup && startNewGame()">新しいゲーム</button>
         </div>
-        <p v-if="state" class="applied-settings" aria-label="現在適用中の設定">現在適用中：初期{{ state.settings.initialTiles }}枚 · 2が{{ 100 - state.settings.spawn4Percent }}%／4が{{ state.settings.spawn4Percent }}% · Undo上限{{ state.settings.undoLimit === 'unlimited' ? '無制限' : `${state.settings.undoLimit}回` }} · {{ modeLabel }} · {{ specialLabel }}</p>
+        <p v-if="state" class="applied-settings" aria-label="現在適用中の設定">現在適用中：初期{{ state.settings.initialTiles }}枚 · 2が{{ 100 - state.settings.spawn4Percent }}%／4が{{ state.settings.spawn4Percent }}% · Undo上限{{ state.settings.undoLimit === 'unlimited' ? '無制限' : `${state.settings.undoLimit}回` }} · {{ modeLabel }} · {{ specialLabel }} · {{ timeLabelSettings }}</p>
         <p v-if="specialRemaining !== null" class="special-status">★ 次のスペシャルまで：<strong>{{ specialRemaining === 1 ? '次の有効移動で出現' : `あと${specialRemaining}手` }}</strong></p>
         <p v-if="specialArrival !== null" class="special-arrival" role="status">★ スペシャル：{{ specialArrival }}が出現しました（通常タイルを置換）</p>
         <p v-if="remainingMs !== null" class="limit-status" :class="{ 'limit-warning': clockStarted && remainingMs <= 30000 }" aria-live="off">残り時間：<strong class="time-remaining">{{ timeLabel }}</strong><span v-if="!clockStarted">（有効な移動で開始）</span><span v-else-if="remainingMs === 0"> · 時間切れ</span><span v-else-if="remainingMs <= 30000"> · 残りわずか</span></p>
@@ -87,8 +97,9 @@ watch(popup, async (next, previous) => {
         <template v-if="state">
           <p id="game-controls-help" class="controls-help">盤面をクリック／タップして矢印キーで操作。盤面のスワイプ、下の方向ボタンでも遊べます。</p>
           <div ref="surface" class="game-surface" :class="{ 'is-locked': inputBlocked }" tabindex="0" role="group" aria-label="盤面の操作領域" aria-describedby="game-controls-help" @pointerdown="onPointerDown" @pointermove="onPointerMove" @pointerup="onPointerUp" @pointercancel="onPointerCancel" @lostpointercapture="onLostPointerCapture">
-            <GameBoard :board="state.position.board" :size="state.settings.size" :presentation="game.presentation.value" :suspended="popup !== null" />
+            <GameBoard :board="state.position.board" :size="state.settings.size" :presentation="game.presentation.value" :suspended="popup !== null || timeEditing" :editable="timeEditing" :selected-cell="selectedCell" @select-cell="game.selectTimeCell" @animation-active="game.setAnimationActive" />
           </div>
+          <SpecialTimePanel v-if="timeSettings?.enabled && timeRemaining !== null" :settings="timeSettings" :charges="timeCharges" :remaining="timeRemaining" :editing="timeEditing" :can-start="canStartTime" :can-confirm="canConfirmTime" :selected-cell="selectedCell" :current-value="currentCellValue" :selected-value="selectedValue" :size="state.settings.size" @start="startSpecialTime" @cancel="cancelSpecialTime" @confirm="finishSpecialTime" @select-value="game.selectTimeValue" />
           <details class="tile-values" data-game-controls-ignore>
             <summary>タイルの正確な数字を確認</summary>
             <div class="tile-values-list" tabindex="0" aria-label="タイルの位置と正確な数字">
@@ -110,11 +121,12 @@ watch(popup, async (next, previous) => {
         <p>矢印キー・盤面のスワイプ・方向ボタンで、盤面全体を動かします。同じ数字がぶつかると合体し、その数字がスコアに加わります。</p>
         <p>盤面が動いたときだけ、新しい2または4が1枚現れます。目標の数字を達成したらお祝いを表示し、その後も続けて遊べます。</p>
         <p>スペシャルモードONでは、指定した有効移動ごとに新規タイル1枚を特別な数字へ置き換えます。得点は合体したときだけ加算されます。</p>
+        <p>スペシャルタイムONでは、有効移動の周期ごとに数字の変更権を獲得します。変更確定時に古いUndo履歴を破棄し、権利の獲得・使用はUndoで戻りません。手詰まりからの修復にも使えます。時間切れ・手数上限後は使えません。</p>
         <p>Tabキーで盤面やボタンに移動できます。矢印キーは1回押すと1手、スワイプは指を離すと1手です。複数指や斜めすぎる操作は移動しません。</p>
         <p>どの方向にも動かせなくなるとゲームオーバーです。ポップアップはEscキーでも閉じられます。</p>
       </section>
       <footer>2048 CUSTOM · ひとつずつ、大きく。</footer>
     </div>
-    <GameResultDialog v-if="popup" :key="popup" :kind="popup" :target="state?.settings.target ?? DEFAULT_SETTINGS.target" :score="score" :moves="moves" :max-tile="maxTile" :error="error" :can-undo="canUndo" :end-reason="endReason" @undo="undoMove" @dismiss="dismissPopup" @new-game="startNewGame" />
+    <GameResultDialog v-if="popup" :key="popup" :kind="popup" :target="state?.settings.target ?? DEFAULT_SETTINGS.target" :score="score" :moves="moves" :max-tile="maxTile" :error="error" :can-special-time="canStartTime" :can-undo="canUndo" :end-reason="endReason" @special-time="startSpecialTime" @undo="undoMove" @dismiss="dismissPopup" @new-game="startNewGame" />
   </main>
 </template>

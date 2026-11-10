@@ -10,10 +10,11 @@ const props = defineProps<{
   moves: number
   maxTile: bigint
   error: string
+  canSpecialTime?: boolean
   canUndo?: boolean
   endReason?: EndReason
 }>()
-const emit = defineEmits<{ dismiss: []; newGame: []; undo: [] }>()
+const emit = defineEmits<{ dismiss: []; newGame: []; undo: []; specialTime: [] }>()
 const endText = computed(() => props.endReason === 'time-expired' ? '時間切れ' : props.endReason === 'move-limit' ? '手数上限に到達' : 'ゲームオーバー')
 const description = computed(() => props.kind === 'goal'
   ? props.endReason ? `目標達成と${endText.value}が重なりました。「結果を見る」またはEscキーで終了結果を確認できます。` : '「続ける」またはEscキーでプレイを再開できます。時間制限中はこの画面でも時間が進みます。'
@@ -21,7 +22,7 @@ const description = computed(() => props.kind === 'goal'
   : '「盤面を見る」またはEscキーで閉じられます。閉じるだけでは終了状態は変わりません。Undoが使える場合は戻って再開できます。')
 const dialog = ref<HTMLDialogElement | null>(null)
 let previousOverflow = ''
-watch(() => props.canUndo, () => {
+watch(() => [props.canUndo, props.canSpecialTime], () => {
   // An expiring deadline can remove the focused Undo action from an open
   // stuck-game dialog. Keep focus in its remaining actions.
   if (dialog.value?.open && !dialog.value.contains(document.activeElement)) dialog.value.querySelector<HTMLButtonElement>('button')?.focus()
@@ -75,6 +76,7 @@ onBeforeUnmount(() => {
     <div class="result-actions">
       <button v-if="props.kind === 'goal'" class="primary dialog-continue" type="button" autofocus @click="emit('dismiss')">{{ endReason ? '結果を見る' : '続ける' }}</button>
       <button class="dialog-new-game" :class="props.kind === 'game-over' ? 'primary' : 'secondary'" type="button" :autofocus="props.kind === 'game-over'" @click="emit('newGame')">新しいゲーム</button>
+      <button v-if="props.kind === 'game-over' && canSpecialTime" class="secondary dialog-special-time" type="button" @click="emit('specialTime')">スペシャルタイムで修復</button>
       <button v-if="props.kind === 'game-over' && canUndo" class="secondary dialog-undo" type="button" @click="emit('undo')">Undoで続ける</button>
       <button v-if="props.kind === 'game-over'" class="secondary dialog-view-board" type="button" @click="emit('dismiss')">盤面を見る</button>
     </div>

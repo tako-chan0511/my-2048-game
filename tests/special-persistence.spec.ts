@@ -28,7 +28,7 @@ describe('special session persistence and migration', () => {
   })
   it.each(modes)('migrates v2 $kind sessions to OFF preserving position and deadline', mode => {
     const session = advanceMoves(createSession(createGame(42, { ...DEFAULT_SETTINGS, mode })), 3)
-    const raw = JSON.parse(encodeGame(session)); raw.version = 2; delete raw.game.settings.special
+    const raw = JSON.parse(encodeGame(session)); raw.version = 2; delete raw.game.settings.specialTime; delete raw.specialTime; delete raw.game.settings.special
     const port = memoryStorage({ [GAME_STORAGE_KEY]: JSON.stringify(raw) }), game = use2048Game(() => 999, port, () => 1000)
     expect(game.state.value).toEqual(session.game)
     expect(game.specialRemaining.value).toBeNull()

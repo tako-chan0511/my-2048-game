@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed } from 'vue'
-import { BOARD_SIZES, TARGETS, SPECIAL_VALUES, DEFAULT_SPECIAL, type SettingsDraft, type SettingsValidation } from '../core/index.ts'
+import { BOARD_SIZES, TARGETS, SPECIAL_VALUES, DEFAULT_SPECIAL, DEFAULT_SPECIAL_TIME, TIME_VALUES, type SettingsDraft, type SettingsValidation } from '../core/index.ts'
 const props = defineProps<{ draft: SettingsDraft; validation: SettingsValidation; disabled: boolean }>()
 const emit = defineEmits<{ 'update:draft': [value: SettingsDraft]; apply: [] }>()
 function update(field: keyof SettingsDraft, event: Event) {
@@ -9,6 +9,13 @@ function update(field: keyof SettingsDraft, event: Event) {
 }
 function updateSpecial(event: Event) {
   emit('update:draft', { ...props.draft, specialEnabled: (event.target as HTMLSelectElement).value === 'on' })
+}
+function updateTimeEnabled(event: Event) {
+  emit('update:draft', { ...props.draft, timeEnabled: (event.target as HTMLSelectElement).value === 'on' })
+}
+function toggleTimeValue(value: number) {
+  const values = props.draft.timeValues ?? [...DEFAULT_SPECIAL_TIME.values]
+  emit('update:draft', { ...props.draft, timeValues: values.includes(value) ? values.filter(v => v !== value) : [...values, value].sort((a, b) => a - b) })
 }
 const maximumTiles = computed(() => typeof props.draft.size === 'number' && Number.isInteger(props.draft.size) && props.draft.size >= 3 && props.draft.size <= 10 ? props.draft.size ** 2 : 100)
 const twoPercent = computed(() => typeof props.draft.spawn4Percent === 'number' && Number.isInteger(props.draft.spawn4Percent) && props.draft.spawn4Percent >= 0 && props.draft.spawn4Percent <= 100 ? 100 - props.draft.spawn4Percent : '—')
@@ -60,6 +67,22 @@ function invalid(field: keyof SettingsDraft | 'mode') { return !props.validation
             <select id="setting-special-value" :value="draft.specialValue ?? DEFAULT_SPECIAL.value" :disabled="draft.specialEnabled !== true" :aria-invalid="invalid('specialValue')" aria-describedby="special-help" @change="update('specialValue', $event)"><option v-for="value in SPECIAL_VALUES" :key="value" :value="value">{{ value }}</option></select>
           </label>
         </div>
+        <div class="settings-grid time-settings">
+          <label for="setting-time-enabled">スペシャルタイム
+            <select id="setting-time-enabled" :value="draft.timeEnabled === true ? 'on' : 'off'" :aria-invalid="invalid('timeEnabled')" @change="updateTimeEnabled"><option value="off">OFF</option><option value="on">ON</option></select>
+          </label>
+          <label for="setting-time-interval">変更権の獲得間隔（手）
+            <input id="setting-time-interval" type="number" inputmode="numeric" min="1" max="100" step="1" :value="draft.timeInterval ?? 10" :disabled="draft.timeEnabled !== true" :aria-invalid="invalid('timeInterval')" @input="update('timeInterval', $event)">
+          </label>
+          <label for="setting-time-max">変更権の最大保有数
+            <input id="setting-time-max" type="number" inputmode="numeric" min="1" max="10" step="1" :value="draft.timeMaxCharges ?? 3" :disabled="draft.timeEnabled !== true" :aria-invalid="invalid('timeMaxCharges')" @input="update('timeMaxCharges', $event)">
+          </label>
+        </div>
+        <fieldset class="time-values-settings" :disabled="draft.timeEnabled !== true" :aria-invalid="invalid('timeValues')" aria-describedby="time-help">
+          <legend>スペシャルタイムで選択可能な数字</legend>
+          <div class="time-value-checks"><label v-for="value in TIME_VALUES" :key="value"><input type="checkbox" :value="value" :checked="(draft.timeValues ?? DEFAULT_SPECIAL_TIME.values).includes(value)" @change="toggleTimeValue(value)">{{ value }}</label></div>
+        </fieldset>
+        <p id="time-help" class="settings-help">指定した有効移動ごとに変更権を獲得し、空きマスを含む1マスの数字を変更できます。Undoで権利は戻りません。上限で見送った権利は後から付与しません。</p>
         <p id="special-help" class="settings-help">出現方式：通常タイルを置換（固定）。指定した有効移動ごとに1枚出現します。初期タイルは通常の2・4です。OFFでは通常ゲームと同じ条件になります。</p>
         <p v-if="draft.modeKind === 'timed'" id="mode-help" class="settings-help">最初の有効な移動で開始します。ポップアップ中、タブ非表示中、ページを閉じた間も時間が進み、時間切れ後はUndoできません。</p>
         <p v-else-if="draft.modeKind === 'moves'" id="mode-help" class="settings-help">盤面が変化した移動だけを数えます。上限後も履歴とUndo回数があれば戻って再開できます。</p>

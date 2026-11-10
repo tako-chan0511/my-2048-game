@@ -1,4 +1,4 @@
-import { RULES_VERSION, SPECIAL_VALUES, type Board, type BoardSize, type Direction, type GameSettings, type GameState, type Position, type RngState, type SettingsIssue, type Tile } from './types.ts'
+import { RULES_VERSION, SPECIAL_VALUES, TIME_VALUES, type Board, type BoardSize, type Direction, type GameSettings, type GameState, type Position, type RngState, type SettingsIssue, type Tile } from './types.ts'
 export const MAX_TILE_POWER = 128
 function object(value: unknown): value is Record<string, unknown> { return value !== null && typeof value === 'object' && !Array.isArray(value) }
 function keys(value: Record<string, unknown>, expected: readonly string[]) { return Object.keys(value).length === expected.length && expected.every(key => Object.hasOwn(value, key)) }
@@ -35,7 +35,7 @@ export function assertNextTileId(board: Board, value: unknown): asserts value is
 export function settingsIssues(value: unknown): readonly SettingsIssue[] {
   if (!object(value)) return [{ field: 'settings', message: '設定の形式が正しくありません。' }]
   const issues: SettingsIssue[] = []
-  if (!keys(value, ['size', 'target', 'initialTiles', 'spawn4Percent', 'undoLimit', 'mode', ...(Object.hasOwn(value, 'special') ? ['special'] : [])])) {
+  if (!keys(value, ['size', 'target', 'initialTiles', 'spawn4Percent', 'undoLimit', 'mode', ...(Object.hasOwn(value, 'special') ? ['special'] : []), ...(Object.hasOwn(value, 'specialTime') ? ['specialTime'] : [])])) {
     issues.push({ field: 'settings', message: '設定に不足または不明な項目があります。' })
   }
   if (!integer(value.size, 3, 10)) issues.push({ field: 'size', message: '盤面サイズは3〜10の整数を選んでください。' })
@@ -68,6 +68,17 @@ export function settingsIssues(value: unknown): readonly SettingsIssue[] {
       if (special.replacement !== 'replace') issues.push({ field: 'special', message: 'スペシャル出現方式は通常タイルの置換のみ対応しています。' })
     }
   }
+  if (Object.hasOwn(value, 'specialTime')) {
+    const time = value.specialTime
+    if (!object(time) || !keys(time, ['enabled', 'interval', 'maxCharges', 'values'])) issues.push({ field: 'specialTime', message: 'スペシャルタイム設定の形式が正しくありません。' })
+    else {
+      if (typeof time.enabled !== 'boolean') issues.push({ field: 'timeEnabled', message: 'スペシャルタイムはONまたはOFFを選んでください。' })
+      if (!integer(time.interval, 1, 100)) issues.push({ field: 'timeInterval', message: '変更権の獲得間隔は1〜100手の整数で指定してください。' })
+      if (!integer(time.maxCharges, 1, 10)) issues.push({ field: 'timeMaxCharges', message: '変更権の最大保有数は1〜10回の整数で指定してください。' })
+      if (!Array.isArray(time.values) || !time.values.length || time.values.length > TIME_VALUES.length || new Set(time.values).size !== time.values.length
+        || !Array.from(time.values).every(v => TIME_VALUES.some(allowed => allowed === v))) issues.push({ field: 'timeValues', message: '変更できる数字は2〜256の指定値から1種類以上選んでください（重複不可）。' })
+    }
+  }
   return issues
 }
 export function assertSettings(value: unknown): asserts value is GameSettings {
@@ -84,8 +95,17 @@ export function assertPosition(value: unknown, expectedSize?: BoardSize): assert
   if (typeof value.score !== 'bigint' || value.score < 0n || value.score % 4n !== 0n || !integer(value.moveCount, 0, Number.MAX_SAFE_INTEGER)) throw new RangeError('Invalid score or move count')
 }
 export function assertGameState(value: unknown): asserts value is GameState {
-  if (!object(value) || !keys(value, ['rulesVersion', 'initialSeed', 'settings', 'position', 'maxPowerEver', 'revision']) || value.rulesVersion !== RULES_VERSION) throw new RangeError('Invalid game state')
+  if (!object(value) || !keys(value, ['rulesVersion', 'initialSeed', 'settings', 'position', 'maxPowerEver', 'revision', ...(Object.hasOwn(value, 'editEffects') ? ['editEffects'] : [])]) || value.rulesVersion !== RULES_VERSION) throw new RangeError('Invalid game state')
   assertSeed(value.initialSeed); assertSettings(value.settings); assertPosition(value.position, value.settings.size)
+  if (Object.hasOwn(value, 'editEffects')) {
+    const e = value.editEffects
+    if (!value.settings.specialTime?.enabled || !object(e) || !keys(e, ['edits', 'lastEditMove', 'emptyEdits', 'massDelta', 'potentialDelta'])
+      || !integer(e.lastEditMove, 0, value.position.moveCount) || !integer(e.edits, 1, Number.MAX_SAFE_INTEGER) || !integer(e.emptyEdits, 0, e.edits)
+      || typeof e.massDelta !== 'bigint' || typeof e.potentialDelta !== 'bigint'
+      || e.massDelta % 2n !== 0n || e.potentialDelta % 4n !== 0n) throw new RangeError('Invalid edit effects')
+    const bound = (1n << 128n) * BigInt(e.edits)
+    if (e.massDelta < -bound || e.massDelta > bound || e.potentialDelta < -128n * bound || e.potentialDelta > 128n * bound) throw new RangeError('Invalid edit deltas')
+  }
   const max = Math.max(0, ...value.position.board.map(tile => tile?.power ?? 0))
   if (!integer(value.maxPowerEver, max, MAX_TILE_POWER) || !integer(value.revision, 0, Number.MAX_SAFE_INTEGER)) throw new RangeError('Invalid game metadata')
 }

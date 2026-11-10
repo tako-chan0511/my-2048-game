@@ -1,14 +1,16 @@
 <script setup lang="ts">
-import { computed, ref } from 'vue'
+import { computed, ref, watch } from 'vue'
 import { boardSize, tileValue, type Board, type BoardSize, type Tile } from '../core/index.ts'
 import { useTileAnimation } from '../composables/useTileAnimation.ts'
 import { POP_MS, SLIDE_MS, tileCoordinates, type MovePresentation } from '../presentation/tiles.ts'
-const props = defineProps<{ board: Board; size?: BoardSize; presentation?: MovePresentation | null; suspended?: boolean }>()
+const props = defineProps<{ board: Board; size?: BoardSize; presentation?: MovePresentation | null; suspended?: boolean; editable?: boolean; selectedCell?: number | null }>()
+const emit = defineEmits<{ selectCell: [index: number]; animationActive: [active: boolean] }>()
 const size = computed(() => props.size ?? boardSize(props.board))
 const element = ref<HTMLElement | null>(null)
 const { frame, phase, tiles: visualTiles, reduced } = useTileAnimation({
   board: () => props.board, presentation: () => props.presentation, suspended: () => props.suspended ?? false, element,
 })
+watch(() => frame.value !== null, active => emit('animationActive', active), { flush: 'sync' })
 function tileLabel(tile: Tile | null) {
   const value = tile ? tileValue(tile).toString() : ''
   const digits = size.value <= 4 ? 7 : size.value <= 6 ? 4 : 3
@@ -24,7 +26,8 @@ const visuals = computed(() => visualTiles.value.map(tile => ({ ...tile, ...tile
 <template>
   <div ref="element" class="board" :class="{ 'is-animating': frame !== null }" role="table" :aria-label="`${size}行${size}列の2048盤面`" :aria-rowcount="size" :aria-colcount="size" :data-size="size" :data-animation="frame ? phase : 'idle'" :data-reduced-motion="reduced" :style="{ '--board-size': size, '--slide-ms': `${SLIDE_MS}ms`, '--pop-ms': `${POP_MS}ms` }">
     <div v-for="row in size" :key="row" class="board-row" role="row">
-      <div v-for="cell in cells.slice((row - 1) * size, row * size)" :key="cell.index" class="cell" :class="{ tile: cell.power > 0, 'is-special-spawn': cell.special }" role="cell" :data-cell="cell.index" :data-power="cell.power" :data-tile-id="cell.id" :aria-label="`${row}行${cell.index % size + 1}列、${cell.value || '空き'}${cell.special ? '、スペシャル出現' : ''}`" :title="cell.value">
+      <div v-for="cell in cells.slice((row - 1) * size, row * size)" :key="cell.index" class="cell" :class="{ tile: cell.power > 0, 'is-special-spawn': cell.special, 'is-edit-selected': editable && selectedCell === cell.index }" role="cell" :data-cell="cell.index" :data-power="cell.power" :data-tile-id="cell.id" :aria-label="`${row}行${cell.index % size + 1}列、${cell.value || '空き'}${cell.special ? '、スペシャル出現' : ''}`" :title="cell.value">
+        <button v-if="editable" class="cell-select" type="button" :aria-label="`${row}行${cell.index % size + 1}列、${cell.value || '空き'}を変更`" :aria-pressed="selectedCell === cell.index" @click.stop="emit('selectCell', cell.index)"></button>
         <span v-if="cell.special" class="special-star" aria-hidden="true">★</span>
         <span v-if="cell.value" class="number" :style="{ '--label-length': cell.label.length }" :class="{ long: cell.label.length >= 4, 'extra-long': cell.label.length >= 6 }" aria-hidden="true">{{ cell.label }}</span>
       </div>

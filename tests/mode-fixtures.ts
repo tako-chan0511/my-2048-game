@@ -10,6 +10,7 @@ export function beforeGoal(mode: GameMode): { session: PlaySession; direction: '
 export function v1Save(text: string): string {
   const raw = JSON.parse(text) as Record<string, unknown>
   const game = raw.game as { settings: Record<string, unknown> }
+  delete game.settings.specialTime; delete raw.specialTime
   delete game.settings.special
   delete raw.clock; delete raw.overNotifiedReason; raw.version = 1
   return JSON.stringify(raw)
