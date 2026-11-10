@@ -155,3 +155,17 @@
 
 .time-settings-pending { font-size: 12px; color: #854d0e; background: #fffbeb; border-radius: 9px; padding: 12px; overflow-wrap: anywhere; }
 .time-use-help { font-size: 12px; color: #64748b; }
+
+/* Keep the applied mode and the active editing state visible above the board. */
+.special-time-status { width: min(100%, 420px); margin: 0 auto 12px; padding: 10px 12px; border: 1px solid #c4b5fd; border-radius: 10px; background: #faf5ff; color: #581c87; }
+.time-mode-heading { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; font-size: 13px; }
+.time-mode-switch { padding: 1px 6px; border-radius: 5px; background: #ede9fe; color: #5b21b6; font-size: 11px; font-weight: 800; }
+.time-mode-state { font-size: 12px; font-weight: 700; }
+.time-mode-detail { min-height: 3.3em; margin: 6px 0 0; font-size: 12px; line-height: 1.65; overflow-wrap: anywhere; }
+.special-time-status[data-status="off"], .special-time-status[data-status="ended"] { border-color: #d9deee; background: #f6f7fc; color: #64748b; }
+.special-time-status[data-status="off"] .time-mode-switch { background: #e2e8f0; color: #475569; }
+.special-time-status[data-status="ready"] { border-color: #8b5cf6; background: #f3e8ff; box-shadow: inset 3px 0 #8b5cf6; }
+.special-time-status[data-status="editing"] { border-color: #6d28d9; background: #6d28d9; color: white; }
+.special-time-status[data-status="editing"] .time-mode-switch { background: white; color: #6d28d9; }
+.game-surface.is-time-editing { outline: 3px solid #7c3aed; outline-offset: 3px; }
+.game-surface.is-time-editing .board { background: #ddd6fe; }

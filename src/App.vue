@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, nextTick, ref, watch } from 'vue'
+import SpecialTimeStatus from './components/SpecialTimeStatus.vue'
 import SpecialTimePanel from './components/SpecialTimePanel.vue'
 import GameBoard from './components/GameBoard.vue'
 import GameSettingsPanel from './components/GameSettingsPanel.vue'
@@ -96,7 +97,8 @@ watch(popup, async (next, previous) => {
         <p v-if="error" class="error" role="alert">{{ error }}</p>
         <template v-if="state">
           <p id="game-controls-help" class="controls-help">盤面をクリック／タップして矢印キーで操作。盤面のスワイプ、下の方向ボタンでも遊べます。</p>
-          <div ref="surface" class="game-surface" :class="{ 'is-locked': inputBlocked }" tabindex="0" role="group" aria-label="盤面の操作領域" aria-describedby="game-controls-help" @pointerdown="onPointerDown" @pointermove="onPointerMove" @pointerup="onPointerUp" @pointercancel="onPointerCancel" @lostpointercapture="onLostPointerCapture">
+          <SpecialTimeStatus :enabled="timeSettings?.enabled ?? false" :editing="timeEditing" :charges="timeCharges" :max-charges="timeSettings?.maxCharges ?? 3" :remaining="timeRemaining" :end-reason="endReason" />
+          <div ref="surface" class="game-surface" :class="{ 'is-locked': inputBlocked, 'is-time-editing': timeEditing }" tabindex="0" role="group" :aria-label="timeEditing ? '数字変更中の盤面' : '盤面の操作領域'" aria-describedby="game-controls-help special-time-state" @pointerdown="onPointerDown" @pointermove="onPointerMove" @pointerup="onPointerUp" @pointercancel="onPointerCancel" @lostpointercapture="onLostPointerCapture">
             <GameBoard :board="state.position.board" :size="state.settings.size" :presentation="game.presentation.value" :suspended="popup !== null || timeEditing" :editable="timeEditing" :selected-cell="selectedCell" @select-cell="game.selectTimeCell" @animation-active="game.setAnimationActive" />
           </div>
           <SpecialTimePanel v-if="timeSettings?.enabled && timeRemaining !== null" :settings="timeSettings" :charges="timeCharges" :remaining="timeRemaining" :editing="timeEditing" :can-start="canStartTime" :can-confirm="canConfirmTime" :selected-cell="selectedCell" :current-value="currentCellValue" :selected-value="selectedValue" :size="state.settings.size" @start="startSpecialTime" @cancel="cancelSpecialTime" @confirm="finishSpecialTime" @select-value="game.selectTimeValue" />
