@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { DEFAULT_SETTINGS, canUndoSession, dismissSessionPopup, moveSession, observeSession, remainingTimeMs, sessionEndReason, undoSession } from '../src/core/index.ts'
 import { use2048Game } from '../src/composables/use2048Game.ts'
-import { decodeBests, decodeGame, encodeBests, encodeGame, settingsKey } from '../src/services/gameCodec.ts'
+import { SAVE_VERSION, decodeBests, decodeGame, encodeBests, encodeGame, settingsKey } from '../src/services/gameCodec.ts'
 import { BEST_STORAGE_KEY, GAME_STORAGE_KEY } from '../src/services/gameStorage.ts'
 import { advance, memoryStorage, sessionFor } from './session-fixtures.ts'
 import { timed, v1Save } from './mode-fixtures.ts'
@@ -54,7 +54,7 @@ describe('v2 progress clocks and v1 migration', () => {
     const session = undoSession(advance(sessionFor(), 10)), old = v1Save(encodeGame(session))
     const result = decodeGame(old, 123456)
     expect(result.migratedFromV1).toBe(true); expect(result.session).toEqual(session)
-    expect(JSON.parse(encodeGame(result.session)).version).toBe(2)
+    expect(JSON.parse(encodeGame(result.session)).version).toBe(SAVE_VERSION)
     expect(settingsKey(DEFAULT_SETTINGS)).toBe('[1,4,2048,2,10,10,["normal"]]')
   })
   it('migrates legacy progress in place and keeps valid STEP 4 best records', () => {
@@ -63,7 +63,7 @@ describe('v2 progress clocks and v1 migration', () => {
     const port = memoryStorage({ [GAME_STORAGE_KEY]: old, [BEST_STORAGE_KEY]: best })
     const game = use2048Game(() => 42, port, () => 1000)
     expect(game.score.value).toBe(4n); expect(game.bestScore.value).toBe(16n)
-    expect(JSON.parse(port.data.get(GAME_STORAGE_KEY)!).version).toBe(2)
+    expect(JSON.parse(port.data.get(GAME_STORAGE_KEY)!).version).toBe(SAVE_VERSION)
     expect(port.data.get(BEST_STORAGE_KEY)).toBe(best)
   })
   it('does not infer a deadline from a legacy payload that claims timed mode', () => {

@@ -1,12 +1,12 @@
-import { boardTotal, copyPosition, sessionEndReason, EMPTY_CLOCK, MAX_CLOCK_MS, moveGame, restoreSessionNotifications, theoreticalMaxTile, type GameSettings, type GameState, type PlaySession, type Position, type SessionClock, type EndReason } from '../core/index.ts'
+import { boardTotal, copyPosition, sessionEndReason, EMPTY_CLOCK, MAX_CLOCK_MS, moveGame, restoreSessionNotifications, theoreticalMaxTile, canonicalSettings, DEFAULT_SPECIAL, maximumSpawnValue, type GameSettings, type GameState, type PlaySession, type Position, type SessionClock, type EndReason } from '../core/index.ts'
 import { assertGameState, assertPosition, assertSettings, integer } from '../core/validation.ts'
 
-export const SAVE_VERSION = 2
+export const SAVE_VERSION = 3
 const BEST_VERSION = 1
 export const MAX_STORAGE_CHARACTERS = 1_500_000
 export const MAX_SERIALIZED_HISTORY_CELLS = 40_000
 export class HistoryStorageLimitError extends RangeError {}
-export interface DecodedGame { readonly session: PlaySession; readonly historyOmitted: boolean; readonly migratedFromV1: boolean }
+export interface DecodedGame { readonly session: PlaySession; readonly historyOmitted: boolean; readonly migratedFromV1: boolean; readonly migratedFromOlderVersion: boolean }
 export type BestEntries = ReadonlyMap<string, bigint>
 function object(value: unknown): value is Record<string, unknown> { return typeof value === 'object' && value !== null && !Array.isArray(value) }
 function exact(value: Record<string, unknown>, fields: readonly string[]) { return Object.keys(value).length === fields.length && fields.every(field => Object.hasOwn(value, field)) }
@@ -25,17 +25,21 @@ export function settingsKey(settings: GameSettings): string {
   assertSettings(settings)
   const mode = settings.mode
   const modeKey = mode.kind === 'timed' ? ['timed', mode.seconds] : mode.kind === 'moves' ? ['moves', mode.limit] : ['normal']
-  return JSON.stringify([1, settings.size, settings.target, settings.initialTiles, settings.spawn4Percent, settings.undoLimit, modeKey])
+  const base = [1, settings.size, settings.target, settings.initialTiles, settings.spawn4Percent, settings.undoLimit, modeKey]
+  return JSON.stringify(settings.special?.enabled ? [...base, ['special', settings.special.interval, settings.special.value, settings.special.replacement]] : base)
 }
 function settingsFromKey(key: string): GameSettings {
   if (key.length > 250) return bad()
   const raw: unknown = JSON.parse(key)
-  if (!Array.isArray(raw) || raw.length !== 7 || raw[0] !== 1 || !Array.isArray(raw[6])) return bad()
+  if (!Array.isArray(raw) || (raw.length !== 7 && raw.length !== 8) || raw[0] !== 1 || !Array.isArray(raw[6])) return bad()
   const keyMode = raw[6] as unknown[]
   const mode: unknown = keyMode[0] === 'normal' && keyMode.length === 1 ? { kind: 'normal' }
     : keyMode[0] === 'timed' && keyMode.length === 2 ? { kind: 'timed', seconds: keyMode[1] }
     : keyMode[0] === 'moves' && keyMode.length === 2 ? { kind: 'moves', limit: keyMode[1] } : null
-  const settings: unknown = { size: raw[1], target: raw[2], initialTiles: raw[3], spawn4Percent: raw[4], undoLimit: raw[5], mode }
+  const extra: unknown = raw[7]
+  if (raw.length === 8 && (!Array.isArray(extra) || extra.length !== 4 || extra[0] !== 'special')) return bad()
+  const settings: unknown = { size: raw[1], target: raw[2], initialTiles: raw[3], spawn4Percent: raw[4], undoLimit: raw[5], mode,
+    ...(Array.isArray(extra) ? { special: { enabled: true, interval: extra[1], value: extra[2], replacement: extra[3] } } : {}) }
   assertSettings(settings)
   if (settingsKey(settings) !== key) return bad()
   return settings
@@ -51,15 +55,20 @@ function readPosition(raw: unknown, settings: GameSettings): Position {
   assertPosition(position, settings.size)
   const count = BigInt(settings.initialTiles) + BigInt(position.moveCount), mass = boardTotal(position.board)
   const minSpawn = settings.spawn4Percent === 100 ? 4n : 2n, maxSpawn = settings.spawn4Percent === 0 ? 2n : 4n
-  if (mass < count * minSpawn || mass > count * maxSpawn) return bad()
+  const specialCount = settings.special?.enabled ? BigInt(position.moveCount) / BigInt(settings.special.interval) : 0n
+  const specialValue = BigInt(settings.special?.value ?? 32), specialPower = BigInt(Math.log2(Number(specialValue)))
+  const normalCount = count - specialCount, normalMass = mass - specialCount * specialValue
+  if (normalMass < normalCount * minSpawn || normalMass > normalCount * maxSpawn || normalMass % 2n !== 0n) return bad()
   const occupied = position.board.filter(Boolean).length
   if (!occupied || BigInt(position.nextTileId) !== 2n * count - BigInt(occupied) + 1n) return bad()
   const potential = position.board.reduce((total, tile) => total + (tile ? (1n << BigInt(tile.power)) * BigInt(tile.power - 1) : 0n), 0n)
   // Each merge increases sum(value * (power - 1)) by its score gain.
-  // Every spawned 4 contributes 4 to that sum without scoring; total mass and
-  // spawn count recover exactly how many 4s have appeared on this branch.
-  const fourCount = (mass - 2n * count) / 2n
-  if (position.score !== potential - 4n * fourCount || position.score > scoreBound(settings)) return bad()
+  // Normal 4s contribute 4 without scoring; each special V contributes
+  // V * (log2(V) - 1). Subtract both to recover merge-only score.
+  // The valid move count recovers the number of special spawns on this branch.
+  const fourCount = (normalMass - 2n * normalCount) / 2n
+  const spawnPotential = 4n * fourCount + specialCount * specialValue * (specialPower - 1n)
+  if (position.score !== potential - spawnPotential || position.score > scoreBound(settings)) return bad()
   return copyPosition(position)
 }
 function samePosition(a: Position, b: Position): boolean { return JSON.stringify(positionData(a)) === JSON.stringify(positionData(b)) }
@@ -88,23 +97,25 @@ function readClock(raw: unknown, game: GameState): SessionClock {
 export function decodeGame(text: string, nowMs?: number): DecodedGame {
   if (text.length > MAX_STORAGE_CHARACTERS) return bad()
   const raw: unknown = JSON.parse(text)
-  if (!object(raw) || (raw.version !== 1 && raw.version !== SAVE_VERSION)) return bad()
+  if (!object(raw) || (raw.version !== 1 && raw.version !== 2 && raw.version !== SAVE_VERSION)) return bad()
   const legacy = raw.version === 1
   const fields = ['version', 'game', 'history', 'undoUsed', 'goalNotified', 'overNotifiedRevision', 'popup', 'status', 'historyOmitted']
   if (!exact(raw, legacy ? fields : [...fields, 'clock', 'overNotifiedReason'])) return bad()
   if (!object(raw.game) || !exact(raw.game, ['rulesVersion', 'initialSeed', 'settings', 'position', 'maxPowerEver', 'revision'])) return bad()
   assertSettings(raw.game.settings)
-  const position = readPosition(raw.game.position, raw.game.settings)
-  const game: unknown = { ...raw.game, position }
+  if (raw.version < SAVE_VERSION ? Object.hasOwn(raw.game.settings, 'special') : !Object.hasOwn(raw.game.settings, 'special')) return bad()
+  const settings = canonicalSettings(raw.game.settings)
+  const position = readPosition(raw.game.position, settings)
+  const game: unknown = { ...raw.game, settings, position }
   assertGameState(game)
   if (legacy && game.settings.mode.kind !== 'normal') return bad()
   if (game.settings.mode.kind === 'moves' && game.position.moveCount > game.settings.mode.limit) return bad()
   const clock = readClock(legacy ? EMPTY_CLOCK : raw.clock, game)
   const overReason = legacy ? (raw.overNotifiedRevision === null ? null : 'stuck') : raw.overNotifiedReason
   if (overReason !== null && overReason !== 'stuck' && overReason !== 'time-expired' && overReason !== 'move-limit') return bad()
-  const upperPower = game.settings.size ** 2 + (game.settings.spawn4Percent === 0 ? 0 : 1)
+  const upperPower = game.settings.size ** 2 - 1 + Math.log2(maximumSpawnValue(game.settings))
   const everMassBound = BigInt(game.settings.initialTiles) + BigInt(game.revision)
-  if (game.maxPowerEver > upperPower || (1n << BigInt(game.maxPowerEver)) > everMassBound * (game.settings.spawn4Percent === 0 ? 2n : 4n)) return bad()
+  if (game.maxPowerEver > upperPower || (1n << BigInt(game.maxPowerEver)) > everMassBound * BigInt(maximumSpawnValue(game.settings))) return bad()
   if (raw.goalNotified === true && game.maxPowerEver < Math.log2(game.settings.target)) return bad()
   if (game.revision < game.position.moveCount || !integer(raw.undoUsed, 0, Number.MAX_SAFE_INTEGER) || !Array.isArray(raw.history)) return bad()
   if (BigInt(game.revision) !== BigInt(game.position.moveCount) + 2n * BigInt(raw.undoUsed)) return bad()
@@ -119,9 +130,9 @@ export function decodeGame(text: string, nowMs?: number): DecodedGame {
     const before = history[i]!, after = history[i + 1] ?? position
     if (before.moveCount + 1 !== after.moveCount || !legalTransition(before, after, game)) return bad()
   }
-  const frozenGame = Object.freeze({ ...game, settings: Object.freeze({ ...game.settings, mode: Object.freeze({ ...game.settings.mode }) }) })
+  const frozenGame = Object.freeze({ ...game, settings: canonicalSettings(game.settings) })
   return { session: restoreSessionNotifications(Object.freeze({ game: frozenGame, history: Object.freeze(history), undoUsed: raw.undoUsed,
-    goalNotified: raw.goalNotified, overNotifiedRevision: raw.overNotifiedRevision, overNotifiedReason: overReason as EndReason, clock, popup: raw.popup }), nowMs), historyOmitted: raw.historyOmitted, migratedFromV1: legacy }
+    goalNotified: raw.goalNotified, overNotifiedRevision: raw.overNotifiedRevision, overNotifiedReason: overReason as EndReason, clock, popup: raw.popup }), nowMs), historyOmitted: raw.historyOmitted, migratedFromV1: legacy, migratedFromOlderVersion: raw.version < SAVE_VERSION }
 }
 export function encodeGame(session: PlaySession, omitHistory = false): string {
   const { game } = session
@@ -130,7 +141,7 @@ export function encodeGame(session: PlaySession, omitHistory = false): string {
   if (game.settings.mode.kind === 'moves' && game.position.moveCount > game.settings.mode.limit) return bad()
   readPosition(positionData(game.position), game.settings)
   if (!omitHistory && session.history.length * game.settings.size ** 2 > MAX_SERIALIZED_HISTORY_CELLS) throw new HistoryStorageLimitError('History size limit')
-  const text = JSON.stringify({ version: SAVE_VERSION, game: { ...game, position: positionData(game.position) },
+  const text = JSON.stringify({ version: SAVE_VERSION, game: { ...game, settings: { ...game.settings, special: game.settings.special ?? DEFAULT_SPECIAL }, position: positionData(game.position) },
     history: omitHistory ? [] : session.history.map(positionData), undoUsed: session.undoUsed,
     goalNotified: session.goalNotified, overNotifiedRevision: session.overNotifiedRevision, overNotifiedReason: session.overNotifiedReason, clock: session.clock, popup: session.popup,
     status: sessionEndReason(session) ? 'game-over' : 'playing', historyOmitted: omitHistory })

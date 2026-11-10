@@ -1,11 +1,14 @@
 <script setup lang="ts">
 import { computed } from 'vue'
-import { BOARD_SIZES, TARGETS, type SettingsDraft, type SettingsValidation } from '../core/index.ts'
+import { BOARD_SIZES, TARGETS, SPECIAL_VALUES, DEFAULT_SPECIAL, type SettingsDraft, type SettingsValidation } from '../core/index.ts'
 const props = defineProps<{ draft: SettingsDraft; validation: SettingsValidation; disabled: boolean }>()
 const emit = defineEmits<{ 'update:draft': [value: SettingsDraft]; apply: [] }>()
 function update(field: keyof SettingsDraft, event: Event) {
   const input = event.target as HTMLInputElement | HTMLSelectElement
   emit('update:draft', { ...props.draft, [field]: field === 'modeKind' || field === 'undoLimit' && input.value === 'unlimited' ? input.value : input.value.trim() === '' ? '' : Number(input.value) })
+}
+function updateSpecial(event: Event) {
+  emit('update:draft', { ...props.draft, specialEnabled: (event.target as HTMLSelectElement).value === 'on' })
 }
 const maximumTiles = computed(() => typeof props.draft.size === 'number' && Number.isInteger(props.draft.size) && props.draft.size >= 3 && props.draft.size <= 10 ? props.draft.size ** 2 : 100)
 const twoPercent = computed(() => typeof props.draft.spawn4Percent === 'number' && Number.isInteger(props.draft.spawn4Percent) && props.draft.spawn4Percent >= 0 && props.draft.spawn4Percent <= 100 ? 100 - props.draft.spawn4Percent : '—')
@@ -47,7 +50,17 @@ function invalid(field: keyof SettingsDraft | 'mode') { return !props.validation
           <label v-if="draft.modeKind === 'moves'" for="setting-moves">制限手数
             <input id="setting-moves" type="number" inputmode="numeric" min="1" max="100000" step="1" :value="draft.moveLimit ?? 1000" :aria-invalid="invalid('moveLimit')" aria-describedby="mode-help" @input="update('moveLimit', $event)">
           </label>
+          <label for="setting-special">スペシャルモード
+            <select id="setting-special" :value="draft.specialEnabled === true ? 'on' : 'off'" :aria-invalid="invalid('specialEnabled')" @change="updateSpecial"><option value="off">OFF</option><option value="on">ON</option></select>
+          </label>
+          <label for="setting-special-interval">スペシャル出現間隔（手）
+            <input id="setting-special-interval" type="number" inputmode="numeric" min="1" max="100" step="1" :value="draft.specialInterval ?? DEFAULT_SPECIAL.interval" :disabled="draft.specialEnabled !== true" :aria-invalid="invalid('specialInterval')" aria-describedby="special-help" @input="update('specialInterval', $event)">
+          </label>
+          <label for="setting-special-value">スペシャル数字
+            <select id="setting-special-value" :value="draft.specialValue ?? DEFAULT_SPECIAL.value" :disabled="draft.specialEnabled !== true" :aria-invalid="invalid('specialValue')" aria-describedby="special-help" @change="update('specialValue', $event)"><option v-for="value in SPECIAL_VALUES" :key="value" :value="value">{{ value }}</option></select>
+          </label>
         </div>
+        <p id="special-help" class="settings-help">出現方式：通常タイルを置換（固定）。指定した有効移動ごとに1枚出現します。初期タイルは通常の2・4です。OFFでは通常ゲームと同じ条件になります。</p>
         <p v-if="draft.modeKind === 'timed'" id="mode-help" class="settings-help">最初の有効な移動で開始します。ポップアップ中、タブ非表示中、ページを閉じた間も時間が進み、時間切れ後はUndoできません。</p>
         <p v-else-if="draft.modeKind === 'moves'" id="mode-help" class="settings-help">盤面が変化した移動だけを数えます。上限後も履歴とUndo回数があれば戻って再開できます。</p>
         <p id="initial-tiles-help" class="settings-help">初期タイルは1〜{{ maximumTiles }}枚。全マスを埋めると、配置によって開始直後に手詰まりになる場合があります。</p>

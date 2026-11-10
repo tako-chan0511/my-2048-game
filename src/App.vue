@@ -11,6 +11,7 @@ import { DEFAULT_SETTINGS, type Direction } from './core/index.ts'
 
 const game = use2048Game(undefined, browserStorage)
 const { state, score, moves, maxTile, gameOver, goalReached, error, popup, inputBlocked, dismissPopup, draftSettings, settingsValidation, canUndo, remainingUndo, undoUsed, bestScore, saveResult, restoreMessage, bestMessage } = game
+const { specialRemaining, specialLabel, specialArrival } = game
 const { endReason, remainingMs, movesLeft, clockStarted, clockRunning, timeLabel, modeLabel } = game
 useGameTicker({ isRunning: () => clockRunning.value, refresh: game.refreshTime, checkpoint: game.checkpoint })
 const surface = ref<HTMLElement | null>(null)
@@ -62,7 +63,9 @@ watch(popup, async (next, previous) => {
           <span class="settings-badge">{{ state?.settings.size ?? DEFAULT_SETTINGS.size }} × {{ state?.settings.size ?? DEFAULT_SETTINGS.size }} · 目標 {{ state?.settings.target ?? DEFAULT_SETTINGS.target }}</span>
           <button class="primary new-game" type="button" @click="!popup && startNewGame()">新しいゲーム</button>
         </div>
-        <p v-if="state" class="applied-settings" aria-label="現在適用中の設定">現在適用中：初期{{ state.settings.initialTiles }}枚 · 2が{{ 100 - state.settings.spawn4Percent }}%／4が{{ state.settings.spawn4Percent }}% · Undo上限{{ state.settings.undoLimit === 'unlimited' ? '無制限' : `${state.settings.undoLimit}回` }} · {{ modeLabel }}</p>
+        <p v-if="state" class="applied-settings" aria-label="現在適用中の設定">現在適用中：初期{{ state.settings.initialTiles }}枚 · 2が{{ 100 - state.settings.spawn4Percent }}%／4が{{ state.settings.spawn4Percent }}% · Undo上限{{ state.settings.undoLimit === 'unlimited' ? '無制限' : `${state.settings.undoLimit}回` }} · {{ modeLabel }} · {{ specialLabel }}</p>
+        <p v-if="specialRemaining !== null" class="special-status">★ 次のスペシャルまで：<strong>{{ specialRemaining === 1 ? '次の有効移動で出現' : `あと${specialRemaining}手` }}</strong></p>
+        <p v-if="specialArrival !== null" class="special-arrival" role="status">★ スペシャル：{{ specialArrival }}が出現しました（通常タイルを置換）</p>
         <p v-if="remainingMs !== null" class="limit-status" :class="{ 'limit-warning': clockStarted && remainingMs <= 30000 }" aria-live="off">残り時間：<strong class="time-remaining">{{ timeLabel }}</strong><span v-if="!clockStarted">（有効な移動で開始）</span><span v-else-if="remainingMs === 0"> · 時間切れ</span><span v-else-if="remainingMs <= 30000"> · 残りわずか</span></p>
         <p v-if="movesLeft !== null" class="limit-status">残り手数：<strong class="moves-remaining">{{ movesLeft }}</strong>手<span v-if="movesLeft === 0"> · 上限到達</span></p>
         <div class="score-grid">
@@ -106,6 +109,7 @@ watch(popup, async (next, previous) => {
         <h2>遊び方</h2>
         <p>矢印キー・盤面のスワイプ・方向ボタンで、盤面全体を動かします。同じ数字がぶつかると合体し、その数字がスコアに加わります。</p>
         <p>盤面が動いたときだけ、新しい2または4が1枚現れます。目標の数字を達成したらお祝いを表示し、その後も続けて遊べます。</p>
+        <p>スペシャルモードONでは、指定した有効移動ごとに新規タイル1枚を特別な数字へ置き換えます。得点は合体したときだけ加算されます。</p>
         <p>Tabキーで盤面やボタンに移動できます。矢印キーは1回押すと1手、スワイプは指を離すと1手です。複数指や斜めすぎる操作は移動しません。</p>
         <p>どの方向にも動かせなくなるとゲームオーバーです。ポップアップはEscキーでも閉じられます。</p>
       </section>

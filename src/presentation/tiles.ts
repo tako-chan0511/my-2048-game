@@ -5,6 +5,7 @@ export interface MovePresentation { readonly id: number; readonly before: Board;
 export interface VisualTile extends Tile {
   readonly from: number
   readonly to: number
+  readonly special?: true
   readonly effect: 'move' | 'merge' | 'spawn' | 'still'
 }
 export interface TileAnimation {
@@ -23,6 +24,7 @@ export function buildTileAnimation(event: MovePresentation): TileAnimation | nul
   }))
   const settled = event.result.state.position.board.flatMap((tile, index): VisualTile[] => tile ? [{
     ...tile, from: index, to: index,
+    ...(event.result.specialSpawned && tile.id === event.result.spawned?.tile.id ? { special: true as const } : {}),
     effect: merged.has(tile.id) ? 'merge' : tile.id === event.result.spawned?.tile.id ? 'spawn' : 'still',
   }] : [])
   return { id: event.id, sliding, settled }

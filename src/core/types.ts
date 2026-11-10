@@ -3,12 +3,22 @@ export type Direction = 'up' | 'right' | 'down' | 'left'
 export type Target = 128 | 256 | 512 | 1024 | 2048 | 4096 | 8192 | 16384 | 32768 | 65536
 export type UndoLimit = 0 | 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 | 10 | 'unlimited'
 export type GameMode = { readonly kind: 'normal' } | { readonly kind: 'timed'; readonly seconds: number } | { readonly kind: 'moves'; readonly limit: number }
+export const SPECIAL_VALUES = Object.freeze([8, 16, 32, 64, 128, 256, 512, 1024] as const)
+export type SpecialValue = typeof SPECIAL_VALUES[number]
+export interface SpecialSettings {
+  readonly enabled: boolean
+  readonly interval: number
+  readonly value: SpecialValue
+  readonly replacement: 'replace'
+}
+export const DEFAULT_SPECIAL: SpecialSettings = Object.freeze({ enabled: false, interval: 5, value: 32, replacement: 'replace' })
 export interface GameSettings {
   readonly size: BoardSize
   readonly target: Target
   readonly initialTiles: number
   readonly spawn4Percent: number
   readonly undoLimit: UndoLimit
+  readonly special?: SpecialSettings
   readonly mode: GameMode
 }
 export interface Tile { readonly id: number; readonly power: number }
@@ -61,6 +71,7 @@ export interface MoveResult {
   readonly merges: readonly MergeEvent[]
   readonly justReachedTarget: boolean
   readonly randomDraws: number
+  readonly specialSpawned?: true
 }
 export const RULES_VERSION = '2048-v1' as const
 export const DEFAULT_SETTINGS: GameSettings = Object.freeze({
@@ -76,11 +87,14 @@ export interface SettingsDraft {
   initialTiles: number | string
   spawn4Percent: number | string
   undoLimit: number | string
+  specialEnabled?: boolean
+  specialInterval?: number | string
+  specialValue?: number | string
   modeKind?: string
   timeSeconds?: number | string
   moveLimit?: number | string
 }
-export interface SettingsIssue { readonly field: keyof GameSettings | 'settings' | 'timeSeconds' | 'moveLimit'; readonly message: string }
+export interface SettingsIssue { readonly field: keyof GameSettings | 'settings' | 'timeSeconds' | 'moveLimit' | 'specialEnabled' | 'specialInterval' | 'specialValue'; readonly message: string }
 export type SettingsValidation =
   | { readonly valid: true; readonly settings: GameSettings; readonly warnings: readonly string[] }
   | { readonly valid: false; readonly issues: readonly SettingsIssue[] }

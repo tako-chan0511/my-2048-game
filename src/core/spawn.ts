@@ -1,4 +1,5 @@
-import type { Board, RandomDraw, RandomSampler, RngState, SpawnResult } from './types.ts'
+import type { Board, RandomDraw, RandomSampler, RngState, SpawnResult, SpecialValue } from './types.ts'
+import { SPECIAL_VALUES } from './types.ts'
 import { allocateTile, copyBoard, increment } from './board.ts'
 import { drawBelow, getRandomState } from './random.ts'
 import { assertBoard, assertNextTileId, assertProbability, assertRng, integer } from './validation.ts'
@@ -7,6 +8,13 @@ function validDraw(draw: RandomDraw, bound: number) {
   assertRng(draw.rng)
 }
 export function spawnTile(board: Board, rng: RngState, nextTileId: number, spawn4Percent = 10, sample: RandomSampler = drawBelow): SpawnResult {
+  return spawn(board, rng, nextTileId, spawn4Percent, sample)
+}
+export function spawnSpecialTile(board: Board, rng: RngState, nextTileId: number, value: SpecialValue, sample: RandomSampler = drawBelow): SpawnResult {
+  if (!SPECIAL_VALUES.includes(value)) throw new RangeError('Invalid special value')
+  return spawn(board, rng, nextTileId, 10, sample, Math.log2(value))
+}
+function spawn(board: Board, rng: RngState, nextTileId: number, spawn4Percent: number, sample: RandomSampler, fixedPower?: number): SpawnResult {
   assertBoard(board); assertRng(rng); assertNextTileId(board, nextTileId); assertProbability(spawn4Percent)
   const empty: number[] = []
   board.forEach((tile, index) => { if (tile === null) empty.push(index) })
@@ -14,8 +22,10 @@ export function spawnTile(board: Board, rng: RngState, nextTileId: number, spawn
   // Allocation is validated before asking the sampler to draw anything.
   const nextId = increment(nextTileId)
   const cell = sample(rng, empty.length); validDraw(cell, empty.length)
-  const value = sample(cell.rng, 100); validDraw(value, 100)
-  const tile = allocateTile(nextTileId, value.value < 100 - spawn4Percent ? 1 : 2)
+  // Normal: cell draw, then value draw (including 0%/100%). Special: cell only.
+  const value = fixedPower === undefined ? sample(cell.rng, 100) : null
+  if (value) validDraw(value, 100)
+  const tile = allocateTile(nextTileId, fixedPower ?? (value!.value < 100 - spawn4Percent ? 1 : 2))
   const index = empty[cell.value]!, output = [...board]; output[index] = tile
-  return Object.freeze({ board: copyBoard(output), rng: getRandomState(value.rng), nextTileId: nextId, spawned: Object.freeze({ index, tile }), draws: cell.draws + value.draws })
+  return Object.freeze({ board: copyBoard(output), rng: getRandomState(value?.rng ?? cell.rng), nextTileId: nextId, spawned: Object.freeze({ index, tile }), draws: cell.draws + (value?.draws ?? 0) })
 }

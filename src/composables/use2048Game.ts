@@ -1,7 +1,7 @@
 import { computed, ref, shallowRef } from 'vue'
 import {
   createGame, createSession, dismissSessionPopup, moveSessionWithResult, undoSession, canUndoSession, undoRemaining,
-  hasReachedTarget, highestPower, DEFAULT_SETTINGS, validateSettings, observeSession, sessionEndReason, remainingTimeMs, remainingMoves,
+  hasReachedTarget, highestPower, DEFAULT_SETTINGS, DEFAULT_SPECIAL, movesUntilSpecial, validateSettings, observeSession, sessionEndReason, remainingTimeMs, remainingMoves,
   type Direction, type GameSettings, type SettingsDraft, type PlaySession,
 } from '../core/index.ts'
 import { createGameStorage, type StoragePort, type SaveResult } from '../services/gameStorage.ts'
@@ -27,7 +27,9 @@ export function use2048Game(seedSource: SeedSource = browserSeed, storage?: Stor
     const mode = kind === 'timed' ? { kind, seconds: draft.timeSeconds ?? 300 }
       : kind === 'moves' ? { kind, limit: draft.moveLimit ?? 1000 } : { kind }
     const { size, target, initialTiles, spawn4Percent, undoLimit } = draft
-    return validateSettings({ ...DEFAULT_SETTINGS, size, target, initialTiles, spawn4Percent, undoLimit, mode })
+    return validateSettings({ ...DEFAULT_SETTINGS, size, target, initialTiles, spawn4Percent, undoLimit, mode,
+      ...(draft.specialEnabled !== undefined || draft.specialInterval !== undefined || draft.specialValue !== undefined ? { special: { enabled: draft.specialEnabled ?? false,
+        interval: draft.specialInterval ?? DEFAULT_SPECIAL.interval, value: draft.specialValue ?? DEFAULT_SPECIAL.value, replacement: 'replace' } } : {}) })
   })
   const state = computed(() => current.value?.game ?? null)
   const popup = computed(() => current.value?.popup ?? null)
@@ -47,6 +49,10 @@ export function use2048Game(seedSource: SeedSource = browserSeed, storage?: Stor
     const mode = state.value?.settings.mode ?? DEFAULT_SETTINGS.mode
     return mode.kind === 'timed' ? `時間制限（${mode.seconds}秒）` : mode.kind === 'moves' ? `手数制限（${mode.limit}手）` : '通常モード'
   })
+  const specialRemaining = computed(() => state.value ? movesUntilSpecial(state.value.settings, moves.value) : null)
+  const specialLabel = computed(() => state.value?.settings.special?.enabled
+    ? `スペシャル：${state.value.settings.special.interval}手ごとに${state.value.settings.special.value}` : 'スペシャル：OFF')
+  const specialArrival = computed(() => presentation.value?.result.specialSpawned ? state.value?.settings.special?.value ?? null : null)
   const goalReached = computed(() => state.value ? hasReachedTarget(state.value) : false)
   const maxTile = computed(() => { const power = state.value ? highestPower(state.value.position.board) : 0; return power ? 1n << BigInt(power) : 0n })
   const inputBlocked = computed(() => !state.value || popup.value !== null || gameOver.value)
@@ -132,6 +138,7 @@ export function use2048Game(seedSource: SeedSource = browserSeed, storage?: Stor
     const applied = current.value.game.settings
     draftSettings.value = { size: applied.size, target: applied.target, initialTiles: applied.initialTiles,
       spawn4Percent: applied.spawn4Percent, undoLimit: applied.undoLimit,
+      ...(applied.special ? { specialEnabled: applied.special.enabled, specialInterval: applied.special.interval, specialValue: applied.special.value } : {}),
       ...(applied.mode.kind === 'timed' ? { modeKind: 'timed', timeSeconds: applied.mode.seconds }
         : applied.mode.kind === 'moves' ? { modeKind: 'moves', moveLimit: applied.mode.limit } : {}) }
     restoreMessage.value = loaded.data.historyOmitted
@@ -139,7 +146,7 @@ export function use2048Game(seedSource: SeedSource = browserSeed, storage?: Stor
       : '保存したゲームを復元しました。'
     updateBest()
     saveResult.value = { status: loaded.data.historyOmitted ? 'history-omitted' : 'saved', message: loaded.data.historyOmitted ? 'Undo履歴は保存されていません。新しい操作の履歴は引き続き記録します。' : '保存した進行状態を読み込みました。' }
-    if (loaded.data.migratedFromV1 || endReason.value === 'time-expired') persist()
+    if (loaded.data.migratedFromOlderVersion || endReason.value === 'time-expired') persist()
   } else {
     const started = newGame()
     if (loaded?.status === 'invalid') restoreMessage.value = started
@@ -150,7 +157,7 @@ export function use2048Game(seedSource: SeedSource = browserSeed, storage?: Stor
       : '保存データを読み込めませんでした。新しいゲームの開始をお試しください。'
   }
   return {
-    state, presentation, score, moves, gameOver, endReason, remainingMs, movesLeft, clockStarted, clockRunning, timeLabel, modeLabel, refreshTime, checkpoint, goalReached, maxTile, draftSettings, settingsValidation, applySettings,
+    state, presentation, specialRemaining, specialLabel, specialArrival, score, moves, gameOver, endReason, remainingMs, movesLeft, clockStarted, clockRunning, timeLabel, modeLabel, refreshTime, checkpoint, goalReached, maxTile, draftSettings, settingsValidation, applySettings,
     popup, inputBlocked, canUndo, remainingUndo, undoUsed, historyLength, undo, bestScore,
     saveResult, restoreMessage, bestMessage, error: computed(() => error.value), newGame, dispatchMove, dismissPopup,
     move: dispatchMove,

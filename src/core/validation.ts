@@ -1,4 +1,4 @@
-import { RULES_VERSION, type Board, type BoardSize, type Direction, type GameSettings, type GameState, type Position, type RngState, type SettingsIssue, type Tile } from './types.ts'
+import { RULES_VERSION, SPECIAL_VALUES, type Board, type BoardSize, type Direction, type GameSettings, type GameState, type Position, type RngState, type SettingsIssue, type Tile } from './types.ts'
 export const MAX_TILE_POWER = 128
 function object(value: unknown): value is Record<string, unknown> { return value !== null && typeof value === 'object' && !Array.isArray(value) }
 function keys(value: Record<string, unknown>, expected: readonly string[]) { return Object.keys(value).length === expected.length && expected.every(key => Object.hasOwn(value, key)) }
@@ -35,7 +35,7 @@ export function assertNextTileId(board: Board, value: unknown): asserts value is
 export function settingsIssues(value: unknown): readonly SettingsIssue[] {
   if (!object(value)) return [{ field: 'settings', message: '設定の形式が正しくありません。' }]
   const issues: SettingsIssue[] = []
-  if (!keys(value, ['size', 'target', 'initialTiles', 'spawn4Percent', 'undoLimit', 'mode'])) {
+  if (!keys(value, ['size', 'target', 'initialTiles', 'spawn4Percent', 'undoLimit', 'mode', ...(Object.hasOwn(value, 'special') ? ['special'] : [])])) {
     issues.push({ field: 'settings', message: '設定に不足または不明な項目があります。' })
   }
   if (!integer(value.size, 3, 10)) issues.push({ field: 'size', message: '盤面サイズは3〜10の整数を選んでください。' })
@@ -58,6 +58,16 @@ export function settingsIssues(value: unknown): readonly SettingsIssue[] {
   } else if (value.mode.kind === 'moves') {
     if (!keys(value.mode, ['kind', 'limit']) || !integer(value.mode.limit, 1, 100000)) issues.push({ field: 'moveLimit', message: '制限手数は1〜100000手の整数で指定してください。' })
   } else issues.push({ field: 'mode', message: '通常・時間制限・手数制限から選んでください。' })
+  if (Object.hasOwn(value, 'special')) {
+    const special = value.special
+    if (!object(special) || !keys(special, ['enabled', 'interval', 'value', 'replacement'])) issues.push({ field: 'special', message: 'スペシャル設定の形式が正しくありません。' })
+    else {
+      if (typeof special.enabled !== 'boolean') issues.push({ field: 'specialEnabled', message: 'スペシャルモードはONまたはOFFを選んでください。' })
+      if (!integer(special.interval, 1, 100)) issues.push({ field: 'specialInterval', message: 'スペシャル出現間隔は1〜100手の整数で指定してください。' })
+      if (!SPECIAL_VALUES.some(value => value === special.value)) issues.push({ field: 'specialValue', message: 'スペシャル数字は8〜1024の指定された2の累乗から選んでください。' })
+      if (special.replacement !== 'replace') issues.push({ field: 'special', message: 'スペシャル出現方式は通常タイルの置換のみ対応しています。' })
+    }
+  }
   return issues
 }
 export function assertSettings(value: unknown): asserts value is GameSettings {
