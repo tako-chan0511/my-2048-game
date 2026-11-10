@@ -9,7 +9,8 @@ const emit = defineEmits<{ start: []; cancel: []; confirm: []; selectValue: [val
 <template>
   <section class="special-time-panel" aria-label="スペシャルタイム">
     <p class="time-countdown">スペシャルタイム：{{ charges >= settings.maxCharges ? `保有上限（次の周期まであと${remaining}手）` : `あと${remaining}手で獲得` }}</p>
-    <p class="time-charges">変更権：<strong>{{ charges }} / {{ settings.maxCharges }}</strong></p>
+    <p class="time-charges" role="status" aria-live="polite" aria-atomic="true">変更権：<strong>{{ charges }} / {{ settings.maxCharges }}</strong></p>
+    <p v-if="!editing" class="time-use-help">{{ settings.interval }}回の有効移動ごとに変更権を1回獲得します。獲得後は下のボタンでマスの数字を変更できます。</p>
     <button v-if="!editing" class="secondary special-time-start" type="button" :disabled="!canStart" @click="emit('start')">スペシャルタイム</button>
     <div v-else class="time-editor">
       <p class="time-editor-title" role="status">スペシャルタイム発動！ 盤面のマスと変更後の数字を選んでください。</p>

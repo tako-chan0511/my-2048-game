@@ -86,6 +86,47 @@ describe('special time settings, preview and confirmation UI', () => {
     expect(after.game.position.score).toBe(before.game.position.score); expect(after.game.position.rng).toEqual(before.game.position.rng)
     expect(w.find('.time-editor').exists()).toBe(false); expect(w.get('.undo-button').attributes()).toHaveProperty('disabled')
   })
+  it('makes the default 10-move award usable in the real App after its animation finishes', async () => {
+    const w = app()
+    await w.get('#setting-size').setValue('10')
+    await w.get('#setting-time-enabled').setValue('on')
+    expect(w.get('.time-settings-pending').text()).toContain('この設定で新しいゲーム')
+    expect(w.find('.special-time-panel').exists()).toBe(false)
+    await apply(w)
+    expect(w.find('.time-settings-pending').exists()).toBe(false)
+    expect(w.get('.time-use-help').text()).toContain('10回の有効移動')
+    const directions = ['左', '上', '右', '下']
+    for (let move = 1; move <= 20; move++) {
+      const count = raw().game.position.moveCount
+      for (const label of directions) {
+        await w.get(`button[aria-label="${label}に移動"]`).trigger('click')
+        if (raw().game.position.moveCount > count) break
+      }
+      expect(raw().game.position.moveCount).toBe(move)
+      expect(raw().specialTime.charges).toBe(Math.floor(move / 10))
+      expect(w.get('.special-time-start').attributes()).toHaveProperty('disabled')
+      await tick(SLIDE_MS + POP_MS)
+      if (move < 10) expect(w.get('.special-time-start').attributes()).toHaveProperty('disabled')
+      else expect(w.get('.special-time-start').attributes('disabled')).toBeUndefined()
+      if (move === 10) {
+        expect(w.get('.time-charges').text()).toContain('1 / 3')
+        await start(w)
+        expect(w.findAll('.cell-select')).toHaveLength(100)
+        await w.get('.time-cancel').trigger('click')
+      }
+    }
+    expect(w.get('.time-charges').text()).toContain('2 / 3')
+  })
+  it('warns when an applied special-time interval is edited without starting a new game', async () => {
+    const w = app(charged())
+    expect(w.find('.time-settings-pending').exists()).toBe(false)
+    await w.get('#setting-time-interval').setValue('5')
+    expect(w.find('.time-settings-pending').exists()).toBe(true)
+    expect(raw().game.settings.specialTime.interval).toBe(10)
+    await apply(w)
+    expect(w.find('.time-settings-pending').exists()).toBe(false)
+    expect(raw().game.settings.specialTime.interval).toBe(5)
+  })
   it('cancel preserves the board, history and right balance', async () => {
     const initial = charged(1, { interval: 1 }, { size: 4 }), w = app(initial), before = raw()
     await start(w); await w.get(`[data-cell="${emptyIndex(initial)}"] .cell-select`).trigger('click'); await w.get('.time-number[data-value="128"]').trigger('click')

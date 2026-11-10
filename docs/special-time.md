@@ -62,4 +62,4 @@ history/current moveCount >= lastEditMove
 
 ## 検証
 
-既存900件を維持し、special-time-core / special-time-persistence / special-time-uiに130件を追加します。周期1/10/100、上限見送り、Undoの重複防止、編集前履歴の破棄、編集後移動Undo、3モード境界、全許可数字と不正設定、空き／占有セル、得点・乱数・ID、v1/v2/v3移行、破損データ、記録分離、保存拒否・容量不足、編集・プレビュー・キャンセル・二重確定・古いUI破棄・reduced-motionを検証します。
+既存900件を維持し、special-time-core / special-time-persistence / special-time-uiに132件を追加します。周期1/10/100、上限見送り、Undoの重複防止、編集前履歴の破棄、編集後移動Undo、3モード境界、全許可数字と不正設定、空き／占有セル、得点・乱数・ID、v1/v2/v3移行、破損データ、記録分離、保存拒否・容量不足、編集・プレビュー・キャンセル・二重確定・古いUI破棄・reduced-motionを検証します。

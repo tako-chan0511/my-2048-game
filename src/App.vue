@@ -115,7 +115,7 @@ watch(popup, async (next, previous) => {
         </template>
         <div v-else class="placeholder">新しいゲームを開始してください。</div>
       </section>
-      <GameSettingsPanel v-model:draft="draftSettings" :validation="settingsValidation" :disabled="popup !== null" @apply="applyNextSettings" />
+      <GameSettingsPanel v-model:draft="draftSettings" :validation="settingsValidation" :disabled="popup !== null" :applied-time="state?.settings.specialTime" @apply="applyNextSettings" />
       <section class="panel rules">
         <h2>遊び方</h2>
         <p>矢印キー・盤面のスワイプ・方向ボタンで、盤面全体を動かします。同じ数字がぶつかると合体し、その数字がスコアに加わります。</p>

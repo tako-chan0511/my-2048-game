@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed } from 'vue'
-import { BOARD_SIZES, TARGETS, SPECIAL_VALUES, DEFAULT_SPECIAL, DEFAULT_SPECIAL_TIME, TIME_VALUES, type SettingsDraft, type SettingsValidation } from '../core/index.ts'
-const props = defineProps<{ draft: SettingsDraft; validation: SettingsValidation; disabled: boolean }>()
+import { BOARD_SIZES, TARGETS, SPECIAL_VALUES, DEFAULT_SPECIAL, DEFAULT_SPECIAL_TIME, TIME_VALUES, type SpecialTimeSettings, type SettingsDraft, type SettingsValidation } from '../core/index.ts'
+const props = defineProps<{ draft: SettingsDraft; validation: SettingsValidation; disabled: boolean; appliedTime?: SpecialTimeSettings }>()
 const emit = defineEmits<{ 'update:draft': [value: SettingsDraft]; apply: [] }>()
 function update(field: keyof SettingsDraft, event: Event) {
   const input = event.target as HTMLInputElement | HTMLSelectElement
@@ -17,6 +17,14 @@ function toggleTimeValue(value: number) {
   const values = props.draft.timeValues ?? [...DEFAULT_SPECIAL_TIME.values]
   emit('update:draft', { ...props.draft, timeValues: values.includes(value) ? values.filter(v => v !== value) : [...values, value].sort((a, b) => a - b) })
 }
+const timePending = computed(() => {
+  const draft = props.draft, applied = props.appliedTime ?? DEFAULT_SPECIAL_TIME
+  const enabled = draft.timeEnabled ?? false
+  if (!enabled && !applied.enabled) return false
+  return enabled !== applied.enabled || draft.timeInterval !== undefined && Number(draft.timeInterval) !== applied.interval
+    || draft.timeMaxCharges !== undefined && Number(draft.timeMaxCharges) !== applied.maxCharges
+    || JSON.stringify([...(draft.timeValues ?? DEFAULT_SPECIAL_TIME.values)].sort((a, b) => a - b)) !== JSON.stringify(applied.values)
+})
 const maximumTiles = computed(() => typeof props.draft.size === 'number' && Number.isInteger(props.draft.size) && props.draft.size >= 3 && props.draft.size <= 10 ? props.draft.size ** 2 : 100)
 const twoPercent = computed(() => typeof props.draft.spawn4Percent === 'number' && Number.isInteger(props.draft.spawn4Percent) && props.draft.spawn4Percent >= 0 && props.draft.spawn4Percent <= 100 ? 100 - props.draft.spawn4Percent : '—')
 function invalid(field: keyof SettingsDraft | 'mode') { return !props.validation.valid && props.validation.issues.some(issue => issue.field === field) }
@@ -82,6 +90,7 @@ function invalid(field: keyof SettingsDraft | 'mode') { return !props.validation
           <legend>スペシャルタイムで選択可能な数字</legend>
           <div class="time-value-checks"><label v-for="value in TIME_VALUES" :key="value"><input type="checkbox" :value="value" :checked="(draft.timeValues ?? DEFAULT_SPECIAL_TIME.values).includes(value)" @change="toggleTimeValue(value)">{{ value }}</label></div>
         </fieldset>
+        <p v-if="timePending" class="time-settings-pending" role="status">スペシャルタイムの設定は編集中です。現在のゲームに適用するには、下の「この設定で新しいゲーム」を押してください。</p>
         <p id="time-help" class="settings-help">指定した有効移動ごとに変更権を獲得し、空きマスを含む1マスの数字を変更できます。Undoで権利は戻りません。上限で見送った権利は後から付与しません。</p>
         <p id="special-help" class="settings-help">出現方式：通常タイルを置換（固定）。指定した有効移動ごとに1枚出現します。初期タイルは通常の2・4です。OFFでは通常ゲームと同じ条件になります。</p>
         <p v-if="draft.modeKind === 'timed'" id="mode-help" class="settings-help">最初の有効な移動で開始します。ポップアップ中、タブ非表示中、ページを閉じた間も時間が進み、時間切れ後はUndoできません。</p>

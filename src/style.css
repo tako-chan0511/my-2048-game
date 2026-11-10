@@ -143,7 +143,7 @@
 .time-editor-actions { display: flex; gap: 8px; flex-wrap: wrap; }
 .time-editor-actions button { flex: 1; }
 .time-preview { padding: 10px; border-radius: 8px; background: white; font-weight: 700; }
-.board .cell { position: relative; }
+.board-row > .cell { position: relative; }
 .cell-select { position: absolute; inset: 0; width: 100%; min-height: 0; padding: 0; border: 2px dashed #a855f7; border-radius: inherit; background: transparent; z-index: 1; }
 .cell-select:hover { background: #c4b5fd33; }
 .cell.is-edit-selected .cell-select { border: 3px solid #581c87; background: #c4b5fd44; }
@@ -152,3 +152,6 @@
 .time-value-checks input { accent-color: #6b21a8; }
 .time-values-settings:disabled, .settings-grid :disabled { opacity: .55; }
 @media (max-width: 420px) { .special-time-panel { padding: 10px; } .time-value-checks { gap: 5px; } }
+
+.time-settings-pending { font-size: 12px; color: #854d0e; background: #fffbeb; border-radius: 9px; padding: 12px; overflow-wrap: anywhere; }
+.time-use-help { font-size: 12px; color: #64748b; }
