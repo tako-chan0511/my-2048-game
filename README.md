@@ -2,6 +2,8 @@
 
 Vue 3 + TypeScript strict + Viteで動く、独立した2048ゲームです。バックエンド・APIキー・環境変数は不要です。
 
+**[本番サイトでプレイ](https://my-2048-game-orcin.vercel.app/)** · [GitHub](https://github.com/tako-chan0511/my-2048-game)
+
 ## 起動
 
 Node.js **22.23.4**（`.nvmrc`）、npm **10.9.9**を基準にしています。
