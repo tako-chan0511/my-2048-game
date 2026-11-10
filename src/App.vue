@@ -18,6 +18,7 @@ const { specialRemaining, specialLabel, specialArrival } = game
 const { endReason, remainingMs, movesLeft, clockStarted, clockRunning, timeLabel, modeLabel } = game
 useGameTicker({ isRunning: () => clockRunning.value, refresh: game.refreshTime, checkpoint: game.checkpoint })
 const surface = ref<HTMLElement | null>(null)
+const workspace = ref<HTMLElement | null>(null)
 const controls = useGameControls({ surface, isBlocked: () => inputBlocked.value, dispatchMove: game.dispatchMove })
 const { dispatchMove, onKeydown, onPointerDown, onPointerMove, onPointerUp, onPointerCancel, onLostPointerCapture } = controls
 const directions: readonly { direction: Direction; label: string; arrow: string }[] = [
@@ -31,7 +32,7 @@ const statusMessage = computed(() => gameOver.value
 function focusBoard() {
   if (!popup.value && surface.value) {
     surface.value.focus({ preventScroll: true })
-    surface.value.scrollIntoView?.({ block: 'nearest' })
+    workspace.value?.scrollIntoView?.({ block: 'nearest' })
   }
 }
 async function startSpecialTime() {
@@ -97,11 +98,14 @@ watch(popup, async (next, previous) => {
         <p v-if="error" class="error" role="alert">{{ error }}</p>
         <template v-if="state">
           <p id="game-controls-help" class="controls-help">盤面をクリック／タップして矢印キーで操作。盤面のスワイプ、下の方向ボタンでも遊べます。</p>
-          <SpecialTimeStatus :enabled="timeSettings?.enabled ?? false" :editing="timeEditing" :charges="timeCharges" :max-charges="timeSettings?.maxCharges ?? 3" :remaining="timeRemaining" :end-reason="endReason" />
-          <div ref="surface" class="game-surface" :class="{ 'is-locked': inputBlocked, 'is-time-editing': timeEditing }" tabindex="0" role="group" :aria-label="timeEditing ? '数字変更中の盤面' : '盤面の操作領域'" aria-describedby="game-controls-help special-time-state" @pointerdown="onPointerDown" @pointermove="onPointerMove" @pointerup="onPointerUp" @pointercancel="onPointerCancel" @lostpointercapture="onLostPointerCapture">
-            <GameBoard :board="state.position.board" :size="state.settings.size" :presentation="game.presentation.value" :suspended="popup !== null || timeEditing" :editable="timeEditing" :selected-cell="selectedCell" @select-cell="game.selectTimeCell" @animation-active="game.setAnimationActive" />
+          <div ref="workspace" class="special-time-workspace" :class="{ 'is-editing': timeEditing }">
+            <SpecialTimeStatus :enabled="timeSettings?.enabled ?? false" :editing="timeEditing" :charges="timeCharges" :max-charges="timeSettings?.maxCharges ?? 3" :remaining="timeRemaining" :end-reason="endReason">
+              <SpecialTimePanel v-if="timeSettings?.enabled && timeRemaining !== null" :settings="timeSettings" :charges="timeCharges" :remaining="timeRemaining" :editing="timeEditing" :can-start="canStartTime" :can-confirm="canConfirmTime" :selected-cell="selectedCell" :current-value="currentCellValue" :selected-value="selectedValue" :size="state.settings.size" @start="startSpecialTime" @cancel="cancelSpecialTime" @confirm="finishSpecialTime" @select-value="game.selectTimeValue" />
+            </SpecialTimeStatus>
+            <div ref="surface" class="game-surface" :class="{ 'is-locked': inputBlocked, 'is-time-editing': timeEditing }" tabindex="0" role="group" :aria-label="timeEditing ? '数字変更中の盤面' : '盤面の操作領域'" aria-describedby="game-controls-help special-time-state" @pointerdown="onPointerDown" @pointermove="onPointerMove" @pointerup="onPointerUp" @pointercancel="onPointerCancel" @lostpointercapture="onLostPointerCapture">
+              <GameBoard :board="state.position.board" :size="state.settings.size" :presentation="game.presentation.value" :suspended="popup !== null || timeEditing" :editable="timeEditing" :selected-cell="selectedCell" @select-cell="game.selectTimeCell" @animation-active="game.setAnimationActive" />
+            </div>
           </div>
-          <SpecialTimePanel v-if="timeSettings?.enabled && timeRemaining !== null" :settings="timeSettings" :charges="timeCharges" :remaining="timeRemaining" :editing="timeEditing" :can-start="canStartTime" :can-confirm="canConfirmTime" :selected-cell="selectedCell" :current-value="currentCellValue" :selected-value="selectedValue" :size="state.settings.size" @start="startSpecialTime" @cancel="cancelSpecialTime" @confirm="finishSpecialTime" @select-value="game.selectTimeValue" />
           <details class="tile-values" data-game-controls-ignore>
             <summary>タイルの正確な数字を確認</summary>
             <div class="tile-values-list" tabindex="0" aria-label="タイルの位置と正確な数字">

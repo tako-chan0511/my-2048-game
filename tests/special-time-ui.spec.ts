@@ -71,7 +71,7 @@ describe('special time settings, preview and confirmation UI', () => {
   it('previews an empty-cell change, confirms once and discards all older Undo history', async () => {
     const initial = charged(1, { interval: 1 }, { size: 4 }), w = app(initial), index = emptyIndex(initial), before = raw()
     await start(w)
-    expect(w.get('.time-editor-title').text()).toContain('発動')
+    expect(w.get('.time-mode-state').text()).toBe('数字を変更中')
     expect(w.findAll('.cell-select')).toHaveLength(16)
     expect(w.get('.time-confirm').attributes()).toHaveProperty('disabled')
     await w.get(`[data-cell="${index}"] .cell-select`).trigger('click')
@@ -94,7 +94,6 @@ describe('special time settings, preview and confirmation UI', () => {
     expect(w.find('.special-time-panel').exists()).toBe(false)
     await apply(w)
     expect(w.find('.time-settings-pending').exists()).toBe(false)
-    expect(w.get('.time-use-help').text()).toContain('10回の有効移動')
     const directions = ['左', '上', '右', '下']
     for (let move = 1; move <= 20; move++) {
       const count = raw().game.position.moveCount
@@ -164,6 +163,20 @@ describe('special time settings, preview and confirmation UI', () => {
     await tick(10000)
     expect(ended.get('.special-time-status').attributes('data-status')).toBe('ended')
     expect(ended.get('.special-time-status').text()).toContain('時間切れ')
+  })
+  it('keeps status, start, number choices and confirmation together immediately above the board', async () => {
+    const w = app(charged())
+    const card = w.get('.special-time-status')
+    expect(card.find('.special-time-start').exists()).toBe(true)
+    expect(card.find('.time-charges').exists()).toBe(true)
+    expect(w.findAll('.special-time-panel')).toHaveLength(1)
+    expect(card.element.nextElementSibling).toBe(w.get('.game-surface').element)
+    await start(w)
+    expect(card.findAll('.time-number')).toHaveLength(8)
+    expect(card.find('.time-confirm').exists()).toBe(true)
+    expect(card.find('.time-cancel').exists()).toBe(true)
+    await w.get('.time-cancel').trigger('click')
+    expect(card.find('.special-time-start').exists()).toBe(true)
   })
   it('cancel preserves the board, history and right balance', async () => {
     const initial = charged(1, { interval: 1 }, { size: 4 }), w = app(initial), before = raw()

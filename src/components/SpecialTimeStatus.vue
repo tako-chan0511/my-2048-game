@@ -22,6 +22,7 @@ const detail = computed(() => {
       <span class="time-mode-switch">{{ enabled ? 'ON' : 'OFF' }}</span>
       <span class="time-mode-state" role="status" aria-live="polite">{{ label }}</span>
     </div>
-    <p class="time-mode-detail">{{ detail }}</p>
+    <p v-if="!editing && (!enabled || status === 'ended')" class="time-mode-detail">{{ detail }}</p>
+    <slot />
   </section>
 </template>

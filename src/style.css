@@ -169,3 +169,17 @@
 .special-time-status[data-status="editing"] .time-mode-switch { background: white; color: #6d28d9; }
 .game-surface.is-time-editing { outline: 3px solid #7c3aed; outline-offset: 3px; }
 .game-surface.is-time-editing .board { background: #ddd6fe; }
+
+/* One compact workspace keeps mode, actions and board together. */
+.special-time-workspace { width: min(100%, 420px); margin: auto; }
+.special-time-workspace .special-time-status { margin: 0 0 8px; }
+.special-time-status .special-time-panel { margin: 8px 0 0; padding: 0; border: 0; background: transparent; }
+.time-progress { display: flex; align-items: center; justify-content: space-between; gap: 6px; flex-wrap: wrap; }
+.time-progress .time-charges, .time-progress .time-countdown { margin: 0 0 6px; }
+.special-time-start { width: 100%; }
+.time-editor .time-preview { min-height: 32px; margin: 8px 0 6px; padding: 5px 8px; color: #581c87; }
+.time-editor .time-number-buttons { gap: 6px; }
+.time-editor .time-editor-actions { margin-top: 6px; }
+.time-editor .time-confirm { background: white; color: #5b21b6; }
+.time-edit-notice { margin: 6px 0 0; color: #ede9fe; font-size: 10px; line-height: 1.4; }
+.special-time-workspace.is-editing .game-surface { width: min(100%, 420px, max(160px, calc(100svh - 300px))); }
