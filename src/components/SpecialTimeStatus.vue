@@ -6,12 +6,12 @@ const props = defineProps<{
 }>()
 const status = computed(() => !props.enabled ? 'off' : props.editing ? 'editing'
   : props.endReason === 'time-expired' || props.endReason === 'move-limit' ? 'ended' : props.charges > 0 ? 'ready' : 'waiting')
-const label = computed(() => ({ off: '無効', waiting: '待機中', ready: '変更権あり', editing: '数字を変更中', ended: '使用終了' })[status.value])
+const label = computed(() => ({ off: '無効', waiting: '待機中', ready: '変更権あり', editing: '移動・数字変更中', ended: '使用終了' })[status.value])
 const detail = computed(() => {
   if (status.value === 'off') return 'このゲームではOFFです。'
   if (status.value === 'editing') return '盤面のマスを選び、変更後の数字を確認して確定してください。'
   if (status.value === 'ended') return props.endReason === 'time-expired' ? '時間切れのため、変更権は使用できません。' : '手数上限に達したため、変更権は使用できません。'
-  if (status.value === 'ready') return `変更権 ${props.charges} / ${props.maxCharges}回。「数字を変更する」ボタンで開始できます。`
+  if (status.value === 'ready') return `変更権 ${props.charges} / ${props.maxCharges}回。「スペシャルタイムを開始」ボタンで開始できます。`
   return `あと${props.remaining}手で変更権を獲得します。`
 })
 </script>

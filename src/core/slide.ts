@@ -51,3 +51,49 @@ export function slideBoard(board: Board, direction: Direction, nextTileId: numbe
   const changed = !same(board, output)
   return freezeResult({ board: changed ? copyBoard(output) : board, changed, scoreGain, nextTileId: id, motions: changed ? motions : [], merges })
 }
+export function slideSelectedTile(board: Board, direction: Direction, selectedIndex: number, nextTileId: number): SlideResult {
+  const size = boardSize(board)
+  assertDirection(direction); assertNextTileId(board, nextTileId)
+  if (!Number.isInteger(selectedIndex) || selectedIndex < 0 || selectedIndex >= board.length) throw new RangeError('Invalid selected tile index')
+  const selected = board[selectedIndex]
+  if (!selected) return freezeResult({ board, changed: false, scoreGain: 0n, nextTileId, motions: [], merges: [] })
+
+  const step = direction === 'left' ? -1 : direction === 'right' ? 1 : direction === 'up' ? -size : size
+  const output = [...board]
+  let destination = selectedIndex
+  let mergeIndex: number | null = null
+  while (true) {
+    const next = destination + step
+    if (next < 0 || next >= board.length
+      || (direction === 'left' && Math.floor(next / size) !== Math.floor(destination / size))
+      || (direction === 'right' && Math.floor(next / size) !== Math.floor(destination / size))) break
+    const occupant = board[next]
+    if (!occupant) { destination = next; continue }
+    if (occupant.power === selected.power) mergeIndex = next
+    break
+  }
+  if (destination === selectedIndex && mergeIndex === null) {
+    return freezeResult({ board, changed: false, scoreGain: 0n, nextTileId, motions: [], merges: [] })
+  }
+
+  if (mergeIndex !== null) {
+    const tile = allocateTile(nextTileId, selected.power + 1)
+    output[selectedIndex] = null
+    output[mergeIndex] = tile
+    return freezeResult({
+      board: copyBoard(output), changed: true, scoreGain: tileValue(tile), nextTileId: increment(nextTileId),
+      motions: [
+        { sourceId: selected.id, from: selectedIndex, to: mergeIndex, resultId: tile.id },
+        { sourceId: board[mergeIndex]!.id, from: mergeIndex, to: mergeIndex, resultId: tile.id },
+      ],
+      merges: [{ sourceIds: Object.freeze([selected.id, board[mergeIndex]!.id] as const), tile, at: mergeIndex }],
+    })
+  }
+
+  output[selectedIndex] = null
+  output[destination] = selected
+  return freezeResult({
+    board: copyBoard(output), changed: true, scoreGain: 0n, nextTileId,
+    motions: [{ sourceId: selected.id, from: selectedIndex, to: destination, resultId: selected.id }], merges: [],
+  })
+}

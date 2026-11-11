@@ -182,4 +182,4 @@
 .time-editor .time-editor-actions { margin-top: 6px; }
 .time-editor .time-confirm { background: white; color: #5b21b6; }
 .time-edit-notice { margin: 6px 0 0; color: #ede9fe; font-size: 10px; line-height: 1.4; }
-.special-time-workspace.is-editing .game-surface { width: min(100%, 420px, max(160px, calc(100svh - 300px))); }
+.special-time-workspace.is-editing .game-surface { width: min(100%, 420px, max(160px, calc(100svh - 350px))); }

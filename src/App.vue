@@ -19,7 +19,18 @@ const { endReason, remainingMs, movesLeft, clockStarted, clockRunning, timeLabel
 useGameTicker({ isRunning: () => clockRunning.value, refresh: game.refreshTime, checkpoint: game.checkpoint })
 const surface = ref<HTMLElement | null>(null)
 const workspace = ref<HTMLElement | null>(null)
-const controls = useGameControls({ surface, isBlocked: () => inputBlocked.value, dispatchMove: game.dispatchMove })
+function dispatchInMode(direction: Direction) {
+  if (!timeEditing.value) return game.dispatchMove(direction)
+  return selectedCell.value !== null && game.dispatchSelectedMove(direction, selectedCell.value)
+}
+const controls = useGameControls({ surface, isBlocked: () => timeEditing.value ? false : inputBlocked.value, dispatchMove: dispatchInMode })
+function onBoardPointerDown(event: PointerEvent) {
+  if (timeEditing.value && event.target instanceof Element) {
+    const cell = event.target.closest<HTMLElement>('[data-cell]')
+    if (cell) game.selectTimeCell(Number(cell.dataset.cell))
+  }
+  onPointerDown(event)
+}
 const { dispatchMove, onKeydown, onPointerDown, onPointerMove, onPointerUp, onPointerCancel, onLostPointerCapture } = controls
 const directions: readonly { direction: Direction; label: string; arrow: string }[] = [
   { direction: 'up', label: '上', arrow: '↑' }, { direction: 'left', label: '左', arrow: '←' },
@@ -97,12 +108,12 @@ watch(popup, async (next, previous) => {
         </div>
         <p v-if="error" class="error" role="alert">{{ error }}</p>
         <template v-if="state">
-          <p id="game-controls-help" class="controls-help">盤面をクリック／タップして矢印キーで操作。盤面のスワイプ、下の方向ボタンでも遊べます。</p>
+          <p id="game-controls-help" class="controls-help">通常時は盤面全体が動きます。スペシャルタイム中はマスを選び、スワイプ・矢印キー・方向ボタンでその1枚だけを移動できます。</p>
           <div ref="workspace" class="special-time-workspace" :class="{ 'is-editing': timeEditing }">
             <SpecialTimeStatus :enabled="timeSettings?.enabled ?? false" :editing="timeEditing" :charges="timeCharges" :max-charges="timeSettings?.maxCharges ?? 3" :remaining="timeRemaining" :end-reason="endReason">
               <SpecialTimePanel v-if="timeSettings?.enabled && timeRemaining !== null" :settings="timeSettings" :charges="timeCharges" :remaining="timeRemaining" :editing="timeEditing" :can-start="canStartTime" :can-confirm="canConfirmTime" :selected-cell="selectedCell" :current-value="currentCellValue" :selected-value="selectedValue" :size="state.settings.size" @start="startSpecialTime" @cancel="cancelSpecialTime" @confirm="finishSpecialTime" @select-value="game.selectTimeValue" />
             </SpecialTimeStatus>
-            <div ref="surface" class="game-surface" :class="{ 'is-locked': inputBlocked, 'is-time-editing': timeEditing }" tabindex="0" role="group" :aria-label="timeEditing ? '数字変更中の盤面' : '盤面の操作領域'" aria-describedby="game-controls-help special-time-state" @pointerdown="onPointerDown" @pointermove="onPointerMove" @pointerup="onPointerUp" @pointercancel="onPointerCancel" @lostpointercapture="onLostPointerCapture">
+            <div ref="surface" class="game-surface" :class="{ 'is-locked': inputBlocked, 'is-time-editing': timeEditing }" tabindex="0" role="group" :aria-label="timeEditing ? '数字変更中の盤面' : '盤面の操作領域'" aria-describedby="game-controls-help special-time-state" @pointerdown="onBoardPointerDown" @pointermove="onPointerMove" @pointerup="onPointerUp" @pointercancel="onPointerCancel" @lostpointercapture="onLostPointerCapture">
               <GameBoard :board="state.position.board" :size="state.settings.size" :presentation="game.presentation.value" :suspended="popup !== null || timeEditing" :editable="timeEditing" :selected-cell="selectedCell" @select-cell="game.selectTimeCell" @animation-active="game.setAnimationActive" />
             </div>
           </div>
@@ -114,7 +125,7 @@ watch(popup, async (next, previous) => {
           </details>
           <p class="game-status" :class="{ achieved: goalReached, ended: gameOver }" role="status">{{ statusMessage }}</p>
           <div class="direction-pad" role="group" aria-label="移動方向">
-            <button v-for="item in directions" :key="item.direction" type="button" :class="item.direction" :aria-label="`${item.label}に移動`" :disabled="inputBlocked" @click="dispatchMove(item.direction)">
+            <button v-for="item in directions" :key="item.direction" type="button" :class="item.direction" :aria-label="`${item.label}に移動`" :disabled="timeEditing ? selectedCell === null : inputBlocked" @click="dispatchMove(item.direction)">
               <span aria-hidden="true">{{ item.arrow }}</span><span>{{ item.label }}</span>
             </button>
           </div>
@@ -127,6 +138,7 @@ watch(popup, async (next, previous) => {
         <p>矢印キー・盤面のスワイプ・方向ボタンで、盤面全体を動かします。同じ数字がぶつかると合体し、その数字がスコアに加わります。</p>
         <p>盤面が動いたときだけ、新しい2または4が1枚現れます。目標の数字を達成したらお祝いを表示し、その後も続けて遊べます。</p>
         <p>スペシャルモードONでは、指定した有効移動ごとに新規タイル1枚を特別な数字へ置き換えます。得点は合体したときだけ加算されます。</p>
+        <p>スペシャルタイム中の個別移動は成功時に変更権を1回消費します。同じ数字は合体します。通常の手数・新規タイル生成は進みません。</p>
         <p>スペシャルタイムONでは、有効移動の周期ごとに数字の変更権を獲得します。変更確定時に古いUndo履歴を破棄し、権利の獲得・使用はUndoで戻りません。手詰まりからの修復にも使えます。時間切れ・手数上限後は使えません。</p>
         <p>Tabキーで盤面やボタンに移動できます。矢印キーは1回押すと1手、スワイプは指を離すと1手です。複数指や斜めすぎる操作は移動しません。</p>
         <p>どの方向にも動かせなくなるとゲームオーバーです。ポップアップはEscキーでも閉じられます。</p>

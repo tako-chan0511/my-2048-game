@@ -34,6 +34,28 @@ async function start(w: VueWrapper) { await w.get('.special-time-start').trigger
 async function tick(ms: number) { vi.advanceTimersByTime(ms); await nextTick() }
 
 describe('special time settings, preview and confirmation UI', () => {
+  it('allows individual movement only while special time is open', async () => {
+    const s = charged(), w = app(s)
+    const game = use2048Game(() => 42)
+    expect(game.dispatchSelectedMove('left', 0)).toBe(false)
+    await start(w)
+    const before = raw(), cells = before.game.position.board
+    let candidate: { index: number; direction: string } | null = null
+    for (let i = 0; i < cells.length && !candidate; i++) {
+      if (!cells[i]) continue
+      if (i % 10 > 0 && cells[i - 1] === null) candidate = { index: i, direction: '左' }
+      else if (i % 10 < 9 && cells[i + 1] === null) candidate = { index: i, direction: '右' }
+    }
+    expect(candidate).not.toBeNull()
+    await w.get(`[data-cell="${candidate!.index}"] .cell-select`).trigger('click')
+    await w.get(`button[aria-label="${candidate!.direction}に移動"]`).trigger('click')
+    const after = raw()
+    expect(after.game.position.board).not.toEqual(cells)
+    expect(after.game.position.moveCount).toBe(before.game.position.moveCount)
+    expect(after.game.position.rng).toEqual(before.game.position.rng)
+    expect(after.specialTime.charges).toBe(before.specialTime.charges - 1)
+    expect(w.find('.time-editor').exists()).toBe(false)
+  })
   it('defaults OFF, 10, 3 and all eight numbers, with disabled dependencies', () => {
     const w = app()
     expect((w.get('#setting-time-enabled').element as HTMLSelectElement).value).toBe('off')
@@ -71,7 +93,7 @@ describe('special time settings, preview and confirmation UI', () => {
   it('previews an empty-cell change, confirms once and discards all older Undo history', async () => {
     const initial = charged(1, { interval: 1 }, { size: 4 }), w = app(initial), index = emptyIndex(initial), before = raw()
     await start(w)
-    expect(w.get('.time-mode-state').text()).toBe('数字を変更中')
+    expect(w.get('.time-mode-state').text()).toBe('移動・数字変更中')
     expect(w.findAll('.cell-select')).toHaveLength(16)
     expect(w.get('.time-confirm').attributes()).toHaveProperty('disabled')
     await w.get(`[data-cell="${index}"] .cell-select`).trigger('click')
@@ -141,10 +163,10 @@ describe('special time settings, preview and confirmation UI', () => {
     await tick(SLIDE_MS + POP_MS)
     expect(status().attributes('data-status')).toBe('ready')
     expect(status().text()).toContain('変更権あり')
-    expect(w.get('.special-time-start').text()).toBe('数字を変更する')
+    expect(w.get('.special-time-start').text()).toBe('スペシャルタイムを開始')
     await start(w)
     expect(status().attributes('data-status')).toBe('editing')
-    expect(status().text()).toContain('数字を変更中')
+    expect(status().text()).toContain('移動・数字変更中')
     expect(w.get('.game-surface').classes()).toContain('is-time-editing')
     await w.get('.time-cancel').trigger('click')
     expect(status().attributes('data-status')).toBe('ready')

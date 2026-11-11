@@ -1,7 +1,7 @@
 import { computed, ref, shallowRef } from 'vue'
 import {
   createGame, createSession, dismissSessionPopup, moveSessionWithResult, undoSession, canUndoSession, undoRemaining,
-  hasReachedTarget, highestPower, DEFAULT_SETTINGS, DEFAULT_SPECIAL, DEFAULT_SPECIAL_TIME, canUseSpecialTime, editSessionTile, movesUntilSpecial, validateSettings, observeSession, sessionEndReason, remainingTimeMs, remainingMoves,
+  hasReachedTarget, highestPower, DEFAULT_SETTINGS, DEFAULT_SPECIAL, DEFAULT_SPECIAL_TIME, canUseSpecialTime, editSessionTile, moveSpecialTimeTile, movesUntilSpecial, validateSettings, observeSession, sessionEndReason, remainingTimeMs, remainingMoves,
   type TimeValue, type GameState, type Direction, type GameSettings, type SettingsDraft, type PlaySession,
 } from '../core/index.ts'
 import { createGameStorage, type StoragePort, type SaveResult } from '../services/gameStorage.ts'
@@ -157,6 +157,14 @@ export function use2048Game(seedSource: SeedSource = browserSeed, storage?: Stor
       return false
     }
   }
+  function dispatchSelectedMove(direction: Direction, index: number) {
+    refreshTime()
+    if (!timeEditing.value || animationActive.value || !current.value || editingGame !== state.value) return false
+    const before = current.value, next = moveSpecialTimeTile(before, index, direction, now())
+    current.value = next
+    if (next.game === before.game) { persist(); return false }
+    cancelTimeEditing(); presentation.value = null; error.value = ''; updateBest(); persist(); return true
+  }
   function undo() {
     if (timeEditing.value) { refreshTime(); return false }
     if (!current.value) return false
@@ -212,7 +220,7 @@ export function use2048Game(seedSource: SeedSource = browserSeed, storage?: Stor
     beginTimeEditing, cancelTimeEditing, selectTimeCell, selectTimeValue, confirmTimeEdit, setAnimationActive,
     state, presentation, specialRemaining, specialLabel, specialArrival, score, moves, gameOver, endReason, remainingMs, movesLeft, clockStarted, clockRunning, timeLabel, modeLabel, refreshTime, checkpoint, goalReached, maxTile, draftSettings, settingsValidation, applySettings,
     popup, inputBlocked, canUndo, remainingUndo, undoUsed, historyLength, undo, bestScore,
-    saveResult, restoreMessage, bestMessage, error: computed(() => error.value), newGame, dispatchMove, dismissPopup,
+    saveResult, restoreMessage, bestMessage, error: computed(() => error.value), newGame, dispatchMove, dispatchSelectedMove, dismissPopup,
     move: dispatchMove,
   }
 }

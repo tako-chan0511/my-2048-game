@@ -12,9 +12,9 @@ const emit = defineEmits<{ start: []; cancel: []; confirm: []; selectValue: [val
       <p class="time-charges" role="status" aria-live="polite" aria-atomic="true">変更権：<strong>{{ charges }} / {{ settings.maxCharges }}</strong></p>
       <p class="time-countdown">{{ charges >= settings.maxCharges ? '保有上限' : `次回あと${remaining}手` }}</p>
     </div>
-    <button v-if="!editing" class="secondary special-time-start" type="button" :disabled="!canStart" @click="emit('start')">数字を変更する</button>
+    <button v-if="!editing" class="secondary special-time-start" type="button" :disabled="!canStart" @click="emit('start')">スペシャルタイムを開始</button>
     <div v-else class="time-editor">
-      <p class="time-preview" aria-live="polite">{{ selectedCell === null ? '盤面のマスを選択してください。' : `${Math.floor(selectedCell / size) + 1}行${selectedCell % size + 1}列：${currentValue === 0n ? '空き' : currentValue} → ${selectedValue ?? '数字を選択'}` }}</p>
+      <p class="time-preview" aria-live="polite">{{ selectedCell === null ? 'マスを選び、スワイプで移動／数字ボタンで変更。' : `${Math.floor(selectedCell / size) + 1}行${selectedCell % size + 1}列：${currentValue === 0n ? '空き' : currentValue} → ${selectedValue ?? '数字を選択'}` }}</p>
       <div class="time-number-buttons" role="group" aria-label="変更後の数字">
         <button v-for="value in settings.values" :key="value" class="time-number" type="button" :data-value="value" :aria-pressed="selectedValue === value" @click="emit('selectValue', value)">{{ value }}</button>
       </div>

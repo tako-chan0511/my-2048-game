@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { boardTotal, slideBoard, slideLine, type Board } from '../src/core/index.ts'
+import { boardTotal, slideBoard, slideLine, slideSelectedTile, type Board } from '../src/core/index.ts'
 import { directions, generatedBoards, referenceSlide, tiles, values } from './fixtures.ts'
 describe('line merges', () => {
   it.each([
@@ -79,5 +79,38 @@ describe('board directions', () => {
     const result = slideBoard(board, 'left', 17)
     expect(result.board[0]).not.toBe(board[1]); expect(Object.isFrozen(result.board[0])).toBe(true)
     expect(Object.isFrozen(result.board)).toBe(true)
+  })
+})
+describe('selected tile movement', () => {
+  it('moves only the selected tile until a different tile blocks it', () => {
+    const board = tiles([2, 0, 4, ...Array<number>(13).fill(0)])
+    const result = slideSelectedTile(board, 'right', 0, 17)
+    expect(values(result.board).slice(0, 4)).toEqual([0, 2, 4, 0])
+    expect(result.motions).toEqual([{ sourceId: 1, from: 0, to: 1, resultId: 1 }])
+    expect(result.changed).toBe(true)
+  })
+  it('merges the selected tile with the first matching blocker and does not chain-merge', () => {
+    const board = tiles([2, 2, 2, 4, ...Array<number>(12).fill(0)])
+    const result = slideSelectedTile(board, 'right', 1, 17)
+    expect(values(result.board).slice(0, 4)).toEqual([2, 0, 4, 4])
+    expect(result.scoreGain).toBe(4n)
+    expect(result.nextTileId).toBe(18)
+    expect(result.merges.map(merge => merge.sourceIds)).toEqual([[2, 3]])
+    expect(result.motions.map(motion => motion.sourceId)).toEqual([2, 3])
+  })
+  it('slides a tile through empty cells to the board edge without moving other tiles', () => {
+    const board = tiles([0, 0, 0, 0, 0, 2, 0, 0, 4, ...Array<number>(7).fill(0)])
+    const result = slideSelectedTile(board, 'up', 5, 17)
+    expect(values(result.board).slice(0, 13)).toEqual([0, 2, 0, 0, 0, 0, 0, 0, 4, 0, 0, 0, 0])
+  })
+  it('keeps state and movement events unchanged when blocked or selecting an empty cell', () => {
+    const blocked = tiles([2, 4, 0, 0, ...Array<number>(12).fill(0)])
+    const noMove = slideSelectedTile(blocked, 'right', 0, 17)
+    expect(noMove.board).toBe(blocked); expect(noMove.changed).toBe(false); expect(noMove.motions).toEqual([])
+    const empty = slideSelectedTile(blocked, 'left', 2, 17)
+    expect(empty.board).toBe(blocked); expect(empty.changed).toBe(false)
+  })
+  it('rejects an invalid selected cell', () => {
+    expect(() => slideSelectedTile(tiles(Array<number>(16).fill(0)), 'left', 16, 1)).toThrow(RangeError)
   })
 })

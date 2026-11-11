@@ -1,3 +1,5 @@
+import { slideSelectedTile } from './slide.ts'
+import type { Direction } from './types.ts'
 import { copyBoard, highestPower, increment } from './board.ts'
 import { hasReachedTarget } from './game.ts'
 import { observeSession, resolveSessionResult, sessionEndReason, type PlaySession } from './session.ts'
@@ -28,6 +30,25 @@ export function editSessionTile(session: PlaySession, index: number, value: Time
     potentialDelta: previous.potentialDelta + BigInt(value) * BigInt(power - 1) - oldPotential })
   const nextGame = Object.freeze({ ...game, position: Object.freeze({ ...before, board: copyBoard(board), nextTileId }), editEffects,
     revision: increment(game.revision), maxPowerEver: Math.max(game.maxPowerEver, highestPower(board)) })
+  assertGameState(nextGame)
+  const goal = !session.goalNotified && hasReachedTarget(nextGame), time = session.specialTime!
+  return resolveSessionResult(Object.freeze({ ...session, game: nextGame, history: Object.freeze([]),
+    specialTime: Object.freeze({ ...time, charges: time.charges - 1, used: increment(time.used) }),
+    goalNotified: session.goalNotified || goal, popup: goal ? 'goal' : null }), nowMs)
+}
+
+// One special action: no normal move, random draw, or spawned tile.
+export function moveSpecialTimeTile(session: PlaySession, index: number, direction: Direction, nowMs?: number): PlaySession {
+  session = observeSession(session, nowMs)
+  if (!canUseSpecialTime(session, nowMs)) return session
+  const game = session.game, before = game.position
+  if (!integer(index, 0, before.board.length - 1)) return session
+  const slid = slideSelectedTile(before.board, direction, index, before.nextTileId)
+  if (!slid.changed) return session
+  const previous = game.editEffects ?? { edits: 0, emptyEdits: 0, massDelta: 0n, potentialDelta: 0n }
+  const editEffects = Object.freeze({ ...previous, edits: increment(previous.edits), lastEditMove: before.moveCount })
+  const nextGame = Object.freeze({ ...game, position: Object.freeze({ ...before, board: slid.board, nextTileId: slid.nextTileId, score: before.score + slid.scoreGain }),
+    editEffects, revision: increment(game.revision), maxPowerEver: Math.max(game.maxPowerEver, highestPower(slid.board)) })
   assertGameState(nextGame)
   const goal = !session.goalNotified && hasReachedTarget(nextGame), time = session.specialTime!
   return resolveSessionResult(Object.freeze({ ...session, game: nextGame, history: Object.freeze([]),
